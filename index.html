@@ -218,7 +218,7 @@ const fmt = ts => new Date(ts).toLocaleString('es', {dateStyle:'medium', timeSty
 
 function seed() {
   return {
-    users: [{id:'u_admin', name:'admin', pass:'admin123', dept:'Administración', role:'admin'}],
+    users: [{id:'u_admin', name:'admin', dept:'Administración', role:'admin'}],
     depts: ['Administración', 'Ventas', 'Operaciones'],
     docs: [], fixed: [], logs: [], msgs: [], lockdown: false
   };
@@ -375,11 +375,9 @@ function viewAuth() {
       <label>Usuario<input name="name" autocomplete="username" required></label>
       <label>Contraseña<input type="password" name="pass" autocomplete="current-password" required></label>
       <button class="btn primary" style="width:100%;padding:9px">Entrar</button>
-      <div class="hint">Acceso inicial del administrador: <span class="mono">admin</span> / <span class="mono">admin123</span></div>
     </form>` : `<form data-form="reg" class="stack">
       <label>Nombre de usuario<input name="name" required></label>
       <label>Contraseña<input type="password" name="pass" required></label>
-      <label>Departamento<select name="dept" required><option value="">Selecciona…</option>${S.depts.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
       <button class="btn primary" style="width:100%;padding:9px">Crear usuario</button>
     </form>`}
   </div></div>`;
@@ -451,7 +449,7 @@ function vSubir() {
       <option value="public">Público (todos los usuarios)</option>
       <option value="private">Privado (un solo trabajador)</option>
       <option value="dept">Departamento</option></select></label>
-    <div id="f_priv" hidden><label>Trabajador<select id="f_user"><option value="">Selecciona…</option>${workers().map(u => `<option value="${u.id}">${esc(u.name)} · ${esc(u.dept)}</option>`).join('')}</select></label></div>
+    <div id="f_priv" hidden><label>Trabajador<select id="f_user"><option value="">Selecciona…</option>${workers().map(u => `<option value="${u.id}">${esc(u.name)} · ${esc(u.dept) || 'Sin departamento'}</option>`).join('')}</select></label></div>
     <div id="f_dept" hidden><label>Departamentos</label><div class="row" style="flex-wrap:wrap;gap:6px 18px;margin-top:6px">${S.depts.map(d => `<label class="chk"><input type="checkbox" class="f_d" value="${esc(d)}"> ${esc(d)}</label>`).join('') || '<span class="muted">Crea departamentos primero.</span>'}</div></div>
     <label class="chk"><input type="checkbox" id="f_dl" checked> Permitir descargar</label><div class="muted" style="font-size:12px;margin-top:-6px">${DL_HINT}</div>
     <div class="sec-head"><div><h3>Información del documento</h3><div class="muted" style="font-size:12px">Añade recuadros con título y descripción. «Dejar fijo» los conserva en los siguientes documentos.</div></div>
@@ -518,7 +516,7 @@ function vUsers() {
   return `<div class="between"><div><h1>Usuarios</h1><p class="sub">Credenciales visibles solo para el administrador.</p></div><button class="btn primary" data-act="newuser">Nuevo usuario</button></div>
   <div class="tw"><table><thead><tr><th>Usuario</th><th>Contraseña</th><th>Departamento</th><th>Rol</th><th>Descarga</th><th>Aperturas / descargas</th><th></th></tr></thead><tbody>
   ${S.users.map(u => { const c = counts(u.id); return `<tr>
-    <td><b>${esc(u.name)}</b></td><td class="mono">${esc(u.pass)}</td><td>${esc(u.dept)}</td>
+    <td><b>${esc(u.name)}</b></td><td class="mono">${esc(u.pass)}</td><td>${esc(u.dept) || '<span class="muted">Sin asignar</span>'}</td>
     <td><span class="pill ${u.role === 'admin' ? '' : 'gray'}">${u.role === 'admin' ? 'Administrador' : 'Usuario'}</span></td>
     <td>${u.role === 'admin' ? '<span class="pill gray">—</span>' : `<span class="pill ${userDl(u) ? 'ok' : 'danger'}">${userDl(u) ? 'Activada' : 'Desactivada'}</span>`}</td>
     <td>${c.o} / ${c.d}</td>
@@ -537,7 +535,7 @@ function userForm(u) {
       <label>Nombre de usuario<input name="name" value="${esc(u.name || '')}" required></label>
       <label>Contraseña<input name="pass" ${(u && u.id) ? 'disabled placeholder="Solo la cambia el propio usuario"' : 'required minlength="6"'}></label>
       <div class="grid2">
-        <label>Departamento<select name="dept" required>${S.depts.map(d => `<option ${u.dept === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></label>
+        <label>Departamento<select name="dept"><option value="" ${!u.dept ? 'selected' : ''}>Sin asignar</option>${S.depts.map(d => `<option ${u.dept === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></label>
         <label>Rol<select name="role"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrador</option></select></label>
       </div>
       <div class="err" id="uerr" hidden></div>
@@ -577,7 +575,7 @@ function vLog() {
   const logs = [...S.logs].reverse().filter(l => !ui.logUser || l.uid === ui.logUser).slice(0, 200);
   return `<h1>Historial</h1><p class="sub">Aperturas y descargas por trabajador.</p>
   <h2>Resumen por usuario</h2>
-  <div class="tw" style="margin-bottom:20px">${sum.length ? `<table><thead><tr><th>Usuario</th><th>Departamento</th><th>Aperturas</th><th>Descargas</th><th>Última actividad</th></tr></thead><tbody>${sum.map(s => `<tr><td><b>${esc(s.u.name)}</b></td><td>${esc(s.u.dept)}</td><td>${s.o}</td><td>${s.d}</td><td class="muted">${s.last ? fmt(s.last) : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">Sin usuarios.</div>`}</div>
+  <div class="tw" style="margin-bottom:20px">${sum.length ? `<table><thead><tr><th>Usuario</th><th>Departamento</th><th>Aperturas</th><th>Descargas</th><th>Última actividad</th></tr></thead><tbody>${sum.map(s => `<tr><td><b>${esc(s.u.name)}</b></td><td>${esc(s.u.dept) || 'Sin asignar'}</td><td>${s.o}</td><td>${s.d}</td><td class="muted">${s.last ? fmt(s.last) : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">Sin usuarios.</div>`}</div>
   <div class="between"><h2 style="margin:0">Detalle</h2><select data-chg="logfilter" style="width:220px"><option value="">Todos los usuarios</option>${ws.map(u => `<option value="${u.id}" ${ui.logUser === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></div>
   <div class="tw" style="margin-top:10px">${logs.length ? `<table><thead><tr><th>Usuario</th><th>Acción</th><th>Documento</th><th>Fecha</th></tr></thead><tbody>${logs.map(l => `<tr><td>${esc(l.uname)}</td><td><span class="pill ${l.type === 'open' ? '' : 'warn'}">${l.type === 'open' ? 'Apertura' : 'Descarga'}</span></td><td>${esc(l.title)}</td><td class="muted">${fmt(l.ts)}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">Sin registros.</div>`}</div>`;
 }
@@ -638,7 +636,7 @@ function userPermModal(id) {
   const u = S.users.find(x => x.id === id); if (!u) return;
   const docs = S.docs.filter(d => d.status === 'active');
   openModal(`<div class="modal wide" data-user="${u.id}">
-    <div class="modal-h"><h2 style="margin:0">Permisos de ${esc(u.name)}</h2><span class="muted">${esc(u.dept)}</span></div>
+    <div class="modal-h"><h2 style="margin:0">Permisos de ${esc(u.name)}</h2><span class="muted">${esc(u.dept) || 'Sin departamento'}</span></div>
     <div class="modal-b">
       <div class="between" style="border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:14px">
         <div><b>Permitir descarga</b><div class="muted" style="font-size:12px">Apagado: este usuario no podrá descargar ningún documento, aunque el documento lo permita.</div></div>
@@ -657,11 +655,11 @@ function viewUser() {
   const V = ui.uview.startsWith('folder') ? uFolder : ui.uview === 'history' ? uHistory : ui.uview === 'contact' ? uContact : uDesk;
   return `<div class="top"><div class="brand">${I.logo} <span>Almacén</span></div>
     <nav>${nav.map(([k, l]) => `<button data-act="unav" data-v="${k}" class="${active === k ? 'on' : ''}">${l}</button>`).join('')}</nav>
-    <div class="right row"><span class="muted">${esc(u.name)} · ${esc(u.dept)}</span><button class="btn sm" data-act="logout">Salir</button></div></div>
+    <div class="right row"><span class="muted">${esc(u.name)} · ${esc(u.dept) || 'Sin departamento'}</span><button class="btn sm" data-act="logout">Salir</button></div></div>
     <div class="page">${S.lockdown ? '<div class="notice">El acceso a los documentos está suspendido fuera del horario laboral.</div>' : ''}${V()}</div>`;
 }
 const myDocs = (u, vis) => S.docs.filter(d => d.vis === vis && canAccess(d, u));
-const FOLDERS = u => [['public', 'Documentos públicos', 'Visibles para todos', I.globe], ['private', 'Mis documentos', 'Solo tú puedes verlos', I.lock], ['dept', 'Departamento: ' + u.dept, 'Compartidos con tu departamento', I.team]];
+const FOLDERS = u => [['public', 'Documentos públicos', 'Visibles para todos', I.globe], ['private', 'Mis documentos', 'Solo tú puedes verlos', I.lock], ['dept', 'Departamento: ' + (u.dept || 'sin asignar'), 'Compartidos con tu departamento', I.team]];
 function uDesk() {
   const u = cur();
   return `<h1>Escritorio</h1><p class="sub">Tus documentos, organizados por carpeta.</p><div class="folders">
@@ -862,14 +860,11 @@ const FORM = {
     await enter();
   },
   reg: async f => {
-    const n = f.name.value.trim(), dep = f.dept.value, p = f.pass.value;
-    if (!dep) { ui.err = 'Selecciona un departamento'; return render(); }
+    const n = f.name.value.trim(), p = f.pass.value;
     if (p.length < 6) { ui.err = 'La contraseña debe tener al menos 6 caracteres'; return render(); }
     const { data, error } = await SB.auth.signUp({ email: EMAIL(n), password: p, options: { data: { name: n } } });
     if (error || !data.session) { ui.err = 'Ese nombre de usuario ya existe o no es válido'; return render(); }
     await enter();
-    const u = cur();
-    if (u && u.role !== 'admin') { S.msgs.push({ id: uid(), uid: u.id, uname: u.name, subject: 'Solicitud de departamento', text: 'Quiero pertenecer a: ' + dep, ts: Date.now(), read: false }); save(); toast('Un administrador te asignará tu departamento'); }
   },
   user: async f => {
     const id = f.dataset.id, n = f.name.value.trim(), e = $('#uerr');
