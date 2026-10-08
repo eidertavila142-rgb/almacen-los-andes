@@ -226,9 +226,9 @@ function seed() {
 const SB_URL = 'https://bgfsnwnhxhlcigcktwli.supabase.co', SB_KEY = 'sb_publishable_icLlK0g5LWJrU07LjKhopg_-aV2dani';
 const SB = supabase.createClient(SB_URL, SB_KEY);
 const EMAIL = n => 'almacen.' + String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') + '@gmail.com';
-let S = { users: [], depts: [], docs: [], fixed: [], logs: [], msgs: [], lockdown: false };
+let S = { users: [], depts: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], lockdown: false };
 let SNAP = {};
-const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, depts: () => S.depts.map(n => ({ id: n, n })) };
+const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, depts: () => S.depts.map(n => ({ id: n, n })) };
 function snapNow() {
   const m = {};
   for (const c in COLL) for (const x of COLL[c]()) m[c + '|' + x.id] = JSON.stringify(x);
@@ -260,7 +260,7 @@ function save() {
 async function loadAll() {
   const [p, it] = await Promise.all([SB.from('profiles').select('*'), SB.from('items').select('coll,id,data').limit(5000)]);
   if (p.error || it.error) throw (p.error || it.error);
-  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download })), depts: [], docs: [], fixed: [], logs: [], msgs: [], lockdown: false };
+  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download })), depts: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], lockdown: false };
   for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (S[r.coll]) S[r.coll].push(r.data); }
   SNAP = snapNow();
 }
@@ -337,6 +337,10 @@ const searchBox = (id, ph, img) => {
 };
 const NORES = n => `<tr class="nores" hidden><td colspan="${n}" class="empty">Sin resultados para tu búsqueda.</td></tr>`;
 const docQ = d => esc(norm([d.title, d.fileName, visLabel(d), (d.depts || []).join(' '), ...(d.fields || []).flatMap(f => [f.t, f.d])].join(' ')));
+document.addEventListener('change', e => {
+  if (e.target.id === 'f_info') $('#infoBlock').hidden = !e.target.checked;
+  if (e.target.id === 'm_all') $$('.m_to').forEach(c => c.checked = e.target.checked);
+});
 document.addEventListener('input', e => {
   const t = e.target.closest('[data-search]'); if (!t) return;
   const tb = document.getElementById(t.dataset.search); if (!tb) return;
@@ -365,12 +369,11 @@ function render() {
 
 /* ============ Autenticación ============ */
 function viewAuth() {
-  const login = ui.tab === 'login';
+  const login = true;
   return `<div class="auth"><div class="auth-card">
     <div class="auth-logo"><img src="${LOGO}" alt="Ganadería Industrial Los Andes, C.A."></div>
     <div class="auth-title">Almacén de Documentos</div>
-    <div class="tabs"><button data-act="tab" data-v="login" class="${login ? 'on' : ''}">Iniciar sesión</button><button data-act="tab" data-v="reg" class="${!login ? 'on' : ''}">Crear usuario</button></div>
-    ${ui.err ? `<div class="err" style="margin-bottom:12px">${esc(ui.err)}</div>` : ''}
+        ${ui.err ? `<div class="err" style="margin-bottom:12px">${esc(ui.err)}</div>` : ''}
     ${login ? `<form data-form="login" class="stack">
       <label>Usuario<input name="name" autocomplete="username" required></label>
       <label>Contraseña<input type="password" name="pass" autocomplete="current-password" required></label>
@@ -386,8 +389,8 @@ function viewAuth() {
 /* ============ Panel del administrador ============ */
 function viewAdmin() {
   const unread = S.msgs.filter(m => !m.read).length;
-  const nav = [['resumen','Resumen'],['docs','Documentos'],['subir','Subir documento'],['users','Usuarios'],['depts','Departamentos'],['trash','Papelera'],['archive','Archivo'],['log','Historial'],['msgs','Mensajes'],['cuenta','Mi cuenta']];
-  const V = { resumen: vResumen, docs: vDocs, subir: vSubir, users: vUsers, depts: vDepts, trash: vTrash, archive: vArchive, log: vLog, msgs: vMsgs, cuenta: vCuenta };
+  const nav = [['resumen','Resumen'],['docs','Documentos'],['subir','Subir documento'],['users','Usuarios'],['newu','Crear usuario'],['mail','Enviar correo'],['depts','Departamentos'],['trash','Papelera'],['archive','Archivo'],['log','Historial'],['msgs','Mensajes'],['cuenta','Mi cuenta']];
+  const V = { resumen: vResumen, docs: vDocs, subir: vSubir, users: vUsers, newu: vNewU, mail: vMail, depts: vDepts, trash: vTrash, archive: vArchive, log: vLog, msgs: vMsgs, cuenta: vCuenta };
   return `<div class="shell"><aside>
     <div class="brand">${I.logo} <span>Almacén</span></div>
     <nav>${nav.map(([k, l]) => `<button data-act="nav" data-v="${k}" class="${ui.view === k ? 'on' : ''}">${l}${k === 'msgs' && unread ? `<span class="badge">${unread}</span>` : ''}</button>`).join('')}</nav>
@@ -454,6 +457,7 @@ function vSubir() {
     <label class="chk"><input type="checkbox" id="f_dl" checked> Permitir descargar</label><div class="muted" style="font-size:12px;margin-top:-6px">${DL_HINT}</div>
     <div class="sec-head"><div><h3>Información del documento</h3><div class="muted" style="font-size:12px">Añade recuadros con título y descripción. «Dejar fijo» los conserva en los siguientes documentos.</div></div>
       <button type="button" class="ico" id="addCard" title="Añadir recuadro">+</button></div>
+    <label class="chk"><input type="checkbox" id="f_info"> Activar información del documento (solo la ve el administrador)</label>${infoBlock()}
     <div id="cards"></div>
     <div class="row"><button class="btn primary" id="f_submit">Subir documento</button></div>
   </div>`;
@@ -504,6 +508,7 @@ async function submitUpload() {
   try { await idbPut(doc.id, file); }
   catch (e) { btn.disabled = false; btn.textContent = 'Subir documento'; return toast('No hay espacio suficiente en el navegador para este archivo'); }
   S.docs.push(doc);
+  if ($('#f_info').checked) { const o = { id: doc.id, dist: $$('.i_dist:checked').map(x => x.value) }; $$('.i_f').forEach(x => o[x.dataset.t] = x.value.trim()); S.docinfo.push(o); }
   const prevFixed = S.fixed;
   S.fixed = cards.filter(c => c.fix).map(c => ({ id: c.fid || uid(), t: c.t, d: c.d }));
   if (save()) { toast('Documento subido'); ui.view = 'docs'; render(); }
@@ -543,6 +548,42 @@ function userForm(u) {
     <div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar</button></div>
   </form></div>`);
 }
+
+
+function vNewU() {
+  return `<h1>Crear usuario</h1><p class="sub">Solo el administrador puede crear usuarios.</p>
+  <div class="grid2" style="align-items:start"><form data-form="user" data-id="" class="panel stack">
+    <label>Nombre de usuario (cédula)<input name="name" required inputmode="numeric" pattern="[0-9]+" placeholder="Ej.: 12345678"></label>
+    <label>Contraseña<input name="pass" required minlength="6"></label>
+    <label>Departamento<select name="dept"><option value="">Sin asignar</option>${S.depts.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
+    <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Administrador</option></select></label>
+    <div class="err" id="uerr" hidden></div><div><button class="btn primary">Crear usuario</button></div></form>
+  <div class="panel"><h3 style="margin-top:0">Reglas para crear un usuario</h3><ul style="padding-left:18px;line-height:1.7">
+    <li>El nombre de usuario solo admite cifras numéricas: la <b>cédula</b>, que funciona como ID.</li>
+    <li>No puede repetirse ni llevar letras, espacios o símbolos.</li>
+    <li>La contraseña debe tener al menos 6 caracteres.</li>
+    <li>El departamento lo asigna únicamente el administrador.</li>
+    <li>Los usuarios no pueden crear cuentas por su cuenta.</li></ul></div></div>`;
+}
+function vMail() {
+  const us = workers(), sent = [...S.mails].reverse().slice(0, 10);
+  return `<h1>Enviar correo</h1><p class="sub">Mensaje privado: solo lo ven los usuarios que elijas.</p>
+  <form data-form="mail" class="panel stack" style="max-width:640px"><div><label>Destinatarios</label>
+    <label class="chk"><input type="checkbox" id="m_all"> Seleccionar todos</label>
+    <div class="row" style="flex-wrap:wrap;gap:6px 18px;margin-top:6px">${us.map(u => `<label class="chk"><input type="checkbox" class="m_to" value="${u.id}"> ${esc(u.name)}</label>`).join('') || '<span class="muted">No hay usuarios.</span>'}</div></div>
+    <label>Asunto<input name="subject" required></label><label>Mensaje<textarea name="text" rows="6" required></textarea></label>
+    <div><button class="btn primary">Enviar</button></div></form>
+  ${sent.length ? `<h3 style="margin-top:22px">Enviados</h3>` + sent.map(m => `<div class="panel"><b>${esc(m.subject)}</b> <span class="muted">· para ${m.to.map(id => esc((S.users.find(x => x.id === id) || {}).name || '?')).join(', ')} · ${fmt(m.ts)}</span></div>`).join('') : ''}`;
+}
+function uMail() {
+  const u = cur(), ms = S.mails.filter(m => (m.to || []).includes(u.id)).reverse();
+  return `<h1>Correos</h1><p class="sub">Mensajes privados que te envió el administrador.</p>` + (ms.length ? ms.map(m => `<div class="panel"><div class="between"><b>${esc(m.subject)}</b><span class="muted" style="font-size:12px">${fmt(m.ts)}</span></div><p style="margin:8px 0 0;white-space:pre-wrap">${esc(m.text)}</p></div>`).join('') : `<div class="tw"><div class="empty">No tienes correos.</div></div>`);
+}
+const openBtn = d => d.revision ? '<span class="muted">En revisión</span>' : `<button class="btn sm primary" data-act="open" data-id="${d.id}">Abrir</button>`;
+const INFO = ['Código', 'Nombre', 'Edición', 'Revisión', 'Fecha de edición', 'Fecha de revisión'];
+const infoBlock = () => `<div id="infoBlock" class="stack" hidden><div class="grid2">${INFO.map((t, i) => `<label>${t}<input class="i_f" data-t="${t}" ${i > 3 ? 'type="date"' : ''}></label>`).join('')}
+  <label>Modalidad<select class="i_f" data-t="Modalidad"><option value="">—</option><option>Online</option><option>Presencial</option></select></label></div>
+  <div><label>Distribución (jefes de usuarios)</label><div class="row" style="flex-wrap:wrap;gap:6px 18px;margin-top:6px">${S.users.map(u => `<label class="chk"><input type="checkbox" class="i_dist" value="${esc(u.name)}"> ${esc(u.name)}</label>`).join('')}</div></div></div>`;
 
 /* ---- Departamentos ---- */
 function vDepts() {
@@ -624,6 +665,8 @@ function docPermModal(id, arch) {
           ${g.us.map(u => `<div class="urow p_u" data-name="${esc(u.name.toLowerCase())}"><span>${esc(u.name)}</span><select class="p_sel" data-uid="${u.id}">
             <option value="">Por defecto</option><option value="allow" ${perm(d, u.id) === 'allow' ? 'selected' : ''}>Permitir</option><option value="deny" ${perm(d, u.id) === 'deny' ? 'selected' : ''}>Denegar</option></select></div>`).join('')}</div>`).join('') : '<div class="empty">No hay usuarios.</div>'}
         </div></div>
+      <label class="chk"><input type="checkbox" id="p_rev" ${d.revision ? 'checked' : ''}> Poner en revisión (el documento queda congelado hasta subir la actualización)</label>
+      <label>Subir actualización (sustituye al documento anterior)<input type="file" id="p_upd"></label>
     </div>
     <div class="modal-f"><button class="btn" data-act="close">Cancelar</button><button class="btn primary" data-act="saveperm">${arch ? 'Guardar y activar' : 'Guardar'}</button></div>
   </div>`);
@@ -650,9 +693,9 @@ function userPermModal(id) {
 /* ============ Área del usuario ============ */
 function viewUser() {
   const u = cur();
-  const nav = [['desk', 'Escritorio'], ['history', 'Historial'], ['contact', 'Contactar al administrador']];
+  const nav = [['desk', 'Escritorio'], ['history', 'Historial'], ['mail', 'Correos'], ['contact', 'Contactar al administrador']];
   const active = ui.uview.startsWith('folder') ? 'desk' : ui.uview;
-  const V = ui.uview.startsWith('folder') ? uFolder : ui.uview === 'history' ? uHistory : ui.uview === 'contact' ? uContact : uDesk;
+  const V = ui.uview.startsWith('folder') ? uFolder : ui.uview === 'history' ? uHistory : ui.uview === 'contact' ? uContact : ui.uview === 'mail' ? uMail : uDesk;
   return `<div class="top"><div class="brand">${I.logo} <span>Almacén</span></div>
     <nav>${nav.map(([k, l]) => `<button data-act="unav" data-v="${k}" class="${active === k ? 'on' : ''}">${l}</button>`).join('')}</nav>
     <div class="right row"><span class="muted">${esc(u.name)} · ${esc(u.dept) || 'Sin departamento'}</span><button class="btn sm" data-act="logout">Salir</button></div></div>
@@ -663,13 +706,14 @@ const FOLDERS = u => [['public', 'Documentos públicos', 'Visibles para todos', 
 function uDesk() {
   const u = cur();
   return `<h1>Escritorio</h1><p class="sub">Tus documentos, organizados por carpeta.</p><div class="folders">
-  ${FOLDERS(u).map(([k, t, s, ic]) => { const n = myDocs(u, k).length; return `<button class="folder" data-act="folder" data-v="${k}" ${S.lockdown ? 'disabled' : ''}>${ic}<b>${esc(t)}</b><span>${s} · ${n} documento${n === 1 ? '' : 's'}</span></button>`; }).join('')}</div>`;
+  ${FOLDERS(u).map(([k, t, s, ic]) => { const n = myDocs(u, k).length; return `<button class="folder" data-act="folder" data-v="${k}" ${S.lockdown ? 'disabled' : ''}>${ic}<b>${esc(t)}</b><span>${s} · ${n} documento${n === 1 ? '' : 's'}</span></button>`; }).join('')}</div>
+  ${(() => { const all = S.lockdown ? [] : S.docs.filter(d => canAccess(d, u)); return `<h2 style="margin-top:26px">Todos mis documentos</h2>${all.length ? searchBox('tb_all', 'Buscar en todos mis documentos…') : ''}<div class="tw">${all.length ? `<table><thead><tr><th>Documento</th><th>Archivo</th><th></th></tr></thead><tbody id="tb_all">${all.map(d => `<tr data-q="${docQ(d)}"><td><b>${esc(d.title)}</b></td><td class="muted">${esc(d.fileName)}</td><td style="text-align:right">${openBtn(d)}</td></tr>`).join('')}${NORES(3)}</tbody></table>` : `<div class="empty">No tienes documentos compartidos.</div>`}</div>`; })()}`;
 }
 function uFolder() {
   const u = cur(), k = ui.uview.split(':')[1];
   const f = FOLDERS(u).find(x => x[0] === k); const docs = myDocs(u, k);
   return `<button class="link" data-act="unav" data-v="desk">← Escritorio</button><h1 style="margin-top:8px">${esc(f[1])}</h1><p class="sub">${f[2]}</p>
-  ${docs.length ? searchBox('tb_folder', 'Buscar en esta carpeta…', MASCOT[k]) : ''}<div class="tw">${docs.length ? `<table><thead><tr><th>Documento</th><th>Archivo</th><th></th></tr></thead><tbody id="tb_folder">${docs.map(d => `<tr data-q="${docQ(d)}"><td><b>${esc(d.title)}</b></td><td class="muted">${esc(d.fileName)}</td><td style="text-align:right"><button class="btn sm primary" data-act="open" data-id="${d.id}">Abrir</button></td></tr>`).join('')}${NORES(3)}</tbody></table>` : `<div class="empty">No hay documentos en esta carpeta.</div>`}</div>`;
+  ${docs.length ? searchBox('tb_folder', 'Buscar en esta carpeta…', MASCOT[k]) : ''}<div class="tw">${docs.length ? `<table><thead><tr><th>Documento</th><th>Archivo</th><th></th></tr></thead><tbody id="tb_folder">${docs.map(d => `<tr data-q="${docQ(d)}"><td><b>${esc(d.title)}</b></td><td class="muted">${esc(d.fileName)}</td><td style="text-align:right">${openBtn(d)}</td></tr>`).join('')}${NORES(3)}</tbody></table>` : `<div class="empty">No hay documentos en esta carpeta.</div>`}</div>`;
 }
 function uHistory() {
   const u = cur(); const seen = new Map();
@@ -771,6 +815,7 @@ function log(d, type) { const u = cur(); if (u.role === 'admin') return; S.logs.
 async function openDoc(id, asAdmin) {
   const d = S.docs.find(x => x.id === id); const u = cur(); if (!d) return;
   if (!asAdmin && !canAccess(d, u)) { toast('No tienes acceso a este documento'); render(); return; }
+  if (!asAdmin && d.revision) { toast('Este documento está en revisión'); return; }
   if (!asAdmin) log(d, 'open');
   let blob; try { blob = await getBlob(d); } catch (e) { toast('No se encontró el archivo en este navegador'); return; }
   revokeUrl('modal');
@@ -779,6 +824,7 @@ async function openDoc(id, asAdmin) {
   openModal(`<div class="modal wide" data-doc="${d.id}">
     <div class="modal-h"><div><h2 style="margin:0">${esc(d.title)}</h2><div class="muted" style="font-size:12px">${esc(d.fileName)}</div></div><button class="btn sm no-print" data-act="close">Cerrar</button></div>
     <div class="modal-b">
+      ${asAdmin && S.docinfo.find(x => x.id === d.id) ? (i => `<div class="card-f no-print" style="margin:0 0 14px"><b>Información del documento (solo administrador)</b><div class="muted" style="margin-top:6px;line-height:1.7">${[...INFO, 'Modalidad'].map(t => `${t}: <b>${esc(i[t]) || '—'}</b>`).join(' · ')}<br>Distribución: <b>${esc((i.dist || []).join(', ')) || '—'}</b></div></div>`)(S.docinfo.find(x => x.id === d.id)) : ''}
       ${d.fields.length ? `<div class="no-print" style="display:grid;gap:8px;margin-bottom:14px">${d.fields.map(f => `<div class="card-f" style="margin:0">${f.t ? `<b>${esc(f.t)}</b>` : ''}${f.d ? `<div class="muted" style="white-space:pre-wrap">${esc(f.d)}</div>` : ''}</div>`).join('')}</div>` : ''}
       <div class="row no-print">${canDownload ? `<button class="btn" data-act="download" data-id="${d.id}" data-admin="${asAdmin ? 1 : ''}">Descargar</button>` : '<span class="muted" style="font-size:12px">La descarga no está habilitada para este documento.</span>'}</div>
       <div class="preview">${prev}</div>
@@ -802,7 +848,7 @@ const ACT = {
   totrash: t => askConfirm('¿Enviar este documento a la papelera?', () => { const d = S.docs.find(x => x.id === t.dataset.id); d.status = 'trash'; d.deleted = Date.now(); save(); toast('Enviado a la papelera'); render(); }, 'Enviar a papelera'),
   restore: t => { const d = S.docs.find(x => x.id === t.dataset.id); d.status = 'archive'; d.restored = Date.now(); save(); toast('Restaurado en el archivo'); render(); },
   purge: t => askConfirm('¿Eliminar definitivamente? Esta acción no se puede deshacer.', () => { idbDel(t.dataset.id); S.docs = S.docs.filter(x => x.id !== t.dataset.id); save(); render(); }, 'Eliminar definitivamente'),
-  newuser: () => userForm(),
+  newuser: () => { ui.view = 'newu'; render(); },
   edituser: t => userForm(S.users.find(x => x.id === t.dataset.id)),
   deluser: t => askConfirm('¿Eliminar este usuario?', () => { S.users = S.users.filter(x => x.id !== t.dataset.id); save(); render(); }, 'Eliminar'),
   renamedept: t => {
@@ -812,11 +858,14 @@ const ACT = {
   deldept: t => askConfirm('¿Eliminar este departamento?', () => { S.depts = S.depts.filter(x => x !== t.dataset.n); S.docs.forEach(d => d.depts = d.depts.filter(x => x !== t.dataset.n)); save(); render(); }, 'Eliminar'),
   readmsg: t => { S.msgs.find(m => m.id === t.dataset.id).read = true; save(); render(); },
   delmsg: t => { S.msgs = S.msgs.filter(m => m.id !== t.dataset.id); save(); render(); },
-  saveperm: () => {
+  saveperm: async () => {
     const box = $('.modal[data-doc]'); const d = S.docs.find(x => x.id === box.dataset.doc);
     d.vis = $('#p_vis').value; d.download = $('#p_dl').checked;
     d.depts = d.vis === 'dept' ? $$('.p_d:checked').map(x => x.value) : d.depts;
     const perms = {}; $$('.p_sel').forEach(s => { if (s.value) perms[s.dataset.uid] = s.value; }); d.perms = perms;
+    d.revision = $('#p_rev').checked;
+    const nf = $('#p_upd').files[0];
+    if (nf) { try { await idbPut(d.id, nf); } catch (e) { return toast('No se pudo subir la actualización'); } Object.assign(d, { fileName: nf.name, mime: nf.type || 'application/octet-stream', size: nf.size, updated: Date.now(), revision: false }); }
     if (box.dataset.arch) d.status = 'active';
     save(); closeModal(); toast('Permisos guardados'); render();
   },
@@ -870,6 +919,7 @@ const FORM = {
     const id = f.dataset.id, n = f.name.value.trim(), e = $('#uerr');
     const bad = m => { e.textContent = m; e.hidden = false; };
     if (S.users.some(x => x.name.toLowerCase() === n.toLowerCase() && x.id !== id)) return bad('Ese nombre de usuario ya existe');
+    if (!id && !/^\d+$/.test(n)) return bad('El nombre de usuario solo admite números (la cédula)');
     if (id) {
       const u = S.users.find(x => x.id === id);
       if (u.role === 'admin' && f.role.value !== 'admin' && S.users.filter(x => x.role === 'admin').length === 1) return bad('Debe existir al menos un administrador');
@@ -881,7 +931,7 @@ const FORM = {
       if (error || !data.user) return bad('No se pudo crear el usuario (¿nombre repetido?)');
       S.users.push({ id: data.user.id, name: n, dept: f.dept.value, role: f.role.value, download: true });
     }
-    save(); closeModal(); render();
+    save(); closeModal(); if (!id) toast('Usuario creado'); render();
   },
   cuenta: async f => {
     const u = cur(), err = m => { const e = $('#cerr'); e.textContent = m; e.hidden = false; };
@@ -903,6 +953,7 @@ const FORM = {
     S.depts = S.depts.map(d => d === old ? n : d); S.users.forEach(u => { if (u.dept === old) u.dept = n; }); S.docs.forEach(d => d.depts = d.depts.map(x => x === old ? n : x));
     save(); closeModal(); render();
   },
+  mail: f => { const to = $$('.m_to:checked').map(c => c.value); if (!to.length) return toast('Elige al menos un destinatario'); S.mails.push({ id: uid(), to, subject: f.subject.value.trim(), text: f.text.value.trim(), ts: Date.now() }); save(); toast('Correo enviado'); render(); },
   msg: f => { const u = cur(); S.msgs.push({ id: uid(), uid: u.id, uname: u.name, subject: f.subject.value.trim(), text: f.text.value.trim(), ts: Date.now(), read: false }); save(); toast('Mensaje enviado al administrador'); ui.uview = 'desk'; render(); }
 };
 
