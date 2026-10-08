@@ -226,7 +226,13 @@ function seed() {
   };
 }
 const SB_URL = 'https://bgfsnwnhxhlcigcktwli.supabase.co', SB_KEY = 'sb_publishable_icLlK0g5LWJrU07LjKhopg_-aV2dani';
-const SB = supabase.createClient(SB_URL, SB_KEY);
+/* Sesión solo en esta pestaña: se cierra al cerrar la pestaña o el navegador, y no se comparte entre pestañas ni equipos */
+Object.keys(localStorage).filter(k => k.startsWith('sb-')).forEach(k => localStorage.removeItem(k));
+const SB = supabase.createClient(SB_URL, SB_KEY, { auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true } });
+/* Cierre automático por inactividad (15 min) */
+let idleT; const IDLE_MS = 15 * 60 * 1000;
+const idleReset = () => { clearTimeout(idleT); idleT = setTimeout(() => { if (ui.user) { ACT.logout(); toast('Sesión cerrada por inactividad'); } }, IDLE_MS); };
+['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev => document.addEventListener(ev, idleReset, { passive: true })); idleReset();
 const EMAIL = n => 'almacen.' + String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') + '@gmail.com';
 let S = { users: [], depts: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], lockdown: false };
 let SNAP = {};
