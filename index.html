@@ -576,14 +576,14 @@ function vNewU() {
   return `<h1>Crear usuario</h1><p class="sub">Solo el administrador puede crear usuarios.</p>
   <div class="grid2" style="align-items:start"><form data-form="user" data-id="" class="panel stack">
     <label>Nombre de usuario (cédula)<input name="name" required inputmode="numeric" pattern="[0-9]+" placeholder="Ej.: 12345678"></label>
-    <label>Contraseña<input name="pass" required minlength="6"></label>
+    <label>Contraseña<input name="pass" required minlength="8"></label>
     <label>Departamento<select name="dept"><option value="">Sin asignar</option>${S.depts.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
     <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Administrador</option></select></label>
     <div class="err" id="uerr" hidden></div><div><button class="btn primary">Crear usuario</button></div></form>
   <div class="panel"><h3 style="margin-top:0">Reglas para crear un usuario</h3><ul style="padding-left:18px;line-height:1.7">
     <li>El nombre de usuario solo admite cifras numéricas: la <b>cédula</b>, que funciona como ID.</li>
     <li>No puede repetirse ni llevar letras, espacios o símbolos.</li>
-    <li>La contraseña debe tener al menos 6 caracteres.</li>
+    <li>La contraseña debe tener al menos 8 caracteres.</li>
     <li>El departamento lo asigna únicamente el administrador.</li>
     <li>Los usuarios no pueden crear cuentas por su cuenta.</li></ul></div></div>`;
 }
@@ -953,11 +953,10 @@ const FORM = {
       if (u.role === 'admin' && f.role.value !== 'admin' && S.users.filter(x => x.role === 'admin').length === 1) return bad('Debe existir al menos un administrador');
       Object.assign(u, { name: n, dept: f.dept.value, role: f.role.value });
     } else {
-      if (f.pass.value.length < 6) return bad('La contraseña debe tener al menos 6 caracteres');
-      const tmp = supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
-      const { data, error } = await tmp.auth.signUp({ email: EMAIL(n), password: f.pass.value, options: { data: { name: n } } });
-      if (error || !data.user) return bad('No se pudo crear el usuario (¿nombre repetido?)');
-      S.users.push({ id: data.user.id, name: n, dept: f.dept.value, role: f.role.value, download: true });
+      if (f.pass.value.length < 8) return bad('La contraseña debe tener al menos 8 caracteres');
+      const { data: nid, error } = await SB.rpc('admin_create_user', { p_name: n, p_pass: f.pass.value, p_dept: f.dept.value, p_role: f.role.value });
+      if (error || !nid) return bad(/duplicate|already/i.test(error?.message || '') ? 'Ese usuario ya existe' : (error?.message || 'No se pudo crear el usuario'));
+      S.users.push({ id: nid, name: n, dept: f.dept.value, role: f.role.value, download: true });
     }
     save(); closeModal(); if (!id) toast('Usuario creado'); render();
   },
@@ -970,7 +969,7 @@ const FORM = {
     if (!n) return err('El nombre no puede estar vacío');
     if (S.users.some(x => x.id !== u.id && x.name.toLowerCase() === n.toLowerCase())) return err('Ese nombre de usuario ya existe');
     if (np && np !== f.pass2.value) return err('Las contraseñas nuevas no coinciden');
-    if (np && np.length < 6) return err('La contraseña nueva debe tener al menos 6 caracteres');
+    if (np && np.length < 8) return err('La contraseña nueva debe tener al menos 8 caracteres');
     if (np) { const r = await SB.auth.updateUser({ password: np }); if (r.error) return err(r.error.message); }
     u.name = n; save(); toast('Cuenta actualizada'); render();
   },
