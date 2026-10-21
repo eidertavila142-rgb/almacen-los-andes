@@ -208,6 +208,22 @@ th{border-bottom:2px solid var(--brand-red)}
 .auth-card input{padding:12px 13px;font-size:15px}
 .auth-card .btn{padding:12px!important;font-size:15px}
 @media print{body.noprint-doc>*{display:none!important}body.noprint-doc::before{content:"La impresión de este documento no está permitida";display:block;padding:40px;font:600 18px sans-serif}}
+
+/* ===== Login GILAWEB: vidrio oscuro ===== */
+.auth{background:radial-gradient(circle at 20% 15%,rgba(225,29,20,.18),transparent 45%),radial-gradient(circle at 85% 90%,rgba(225,29,20,.12),transparent 40%),#141920}
+.auth .auth-card{max-width:360px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);border-radius:22px;padding:30px 26px 22px;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 20px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.25);color:#fff;overflow:hidden}
+.auth .auth-card::before{content:"";position:absolute;left:0;top:0;width:55%;height:4px;background:linear-gradient(90deg,#e11d14,rgba(225,29,20,0));z-index:2}
+.auth .auth-card::after{width:190px;height:178px;right:-30px;bottom:-30px;opacity:.14}
+.auth .auth-logo{background:transparent;border:0;padding:0;margin:0 0 6px}
+.auth .auth-logo img{height:118px!important}
+.auth .auth-title{color:#fff;font-size:30px;font-weight:700;letter-spacing:.5px;margin-bottom:22px!important}
+.auth label{color:#aeb6c2;font-size:15px}
+.auth input{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.28);border-radius:12px;height:44px;color:#fff;padding:0 14px}
+.auth input:focus{outline:none;border-color:#ff5a4f;box-shadow:0 0 0 3px rgba(225,29,20,.3)}
+.auth input:-webkit-autofill{-webkit-text-fill-color:#fff;box-shadow:0 0 0 100px #2a303a inset}
+.auth .btn.primary{background:linear-gradient(#d3180f,#b3120b);border:0;color:#fff;height:46px;padding:0!important;border-radius:12px;font-weight:600;font-size:16px;box-shadow:0 6px 14px rgba(190,20,12,.35)}
+.auth .rif{color:#98a2b3;text-align:right}
+.auth .err{background:rgba(180,35,24,.25);color:#f9b4ac;border-radius:10px}
 </style>
 </head>
 <body>
