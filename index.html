@@ -373,7 +373,7 @@ const perm = (d, id) => (d.perms && d.perms[id]) || '';
 const inherits = (d, u) => d.vis === 'public' || (d.vis === 'dept' && d.depts.includes(u.dept));
 function effective(d, u) { const p = perm(d, u.id); if (p === 'deny') return false; if (p === 'allow') return true; return inherits(d, u); }
 const canAccess = (d, u) => d.status === 'active' && !S.lockdown && effective(d, u);
-const workers = () => S.users.filter(u => u.role === 'user');
+const workers = () => S.users.filter(u => u.role !== 'admin');
 const canDl = d => d.download !== false; // documentos anteriores (sin valor) conservan la descarga permitida
 const userDl = u => u.role !== 'user' || u.download !== false; // interruptor de descarga por usuario
 function dlScope(d) {
@@ -1115,7 +1115,7 @@ Object.assign(FORM, {
 
 /* ============ Supervisores de mantenimiento (S1 Automotriz · S2 Infraestructura) ============ */
 const SUP = { sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura' };
-const rolTag = r => r.rrole ? `<div class="small">${SUP[r.rrole]}</div>` : '<div class="small">Usuario</div>';
+const rolTag = r => `<div class="small">${r.rrole ? SUP[r.rrole] : (rolOf(r) || 'Usuario')}</div>`;
 function supTable(rs, mode) {
   if (!rs.length) return `<div class="tw"><div class="empty">${mode === 'mine' ? 'Aún no has enviado solicitudes.' : 'No hay solicitudes.'}</div></div>`;
   const H = mode === 'mine' ? ['Lugar', 'Descripción', 'Fecha', 'Estado'] : ['Solicitante', 'Departamento', 'Lugar', 'Descripción', 'Fecha', 'Estado', ''];
@@ -1132,18 +1132,31 @@ function pcard(r, mode) {
   return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.rrole ? SUP[r.rrole] : 'Usuario'}</div></div>${stP('mant', r.state)}</div><div class="muted" style="font-size:13px">${p.tipo === 'servicio' ? 'Servicio' : 'Compra'} · ${esc(p.unidad || '—')} · Centro de costos: ${esc(p.centro || '—')} · ${fmt(p.ts || r.ts)}</div><div style="font-size:13px">${its.slice(0, 4).map(x => '• ' + esc(x.desc) + ' — ' + esc(x.cant) + ' ' + esc(x.um)).join('<br>')}${its.length > 4 ? '<br>+' + (its.length - 4) + ' más' : ''}</div><div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button>${acts}</div></div>`;
 }
 const pgrid = (rs, mode, empty) => rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(r => pcard(r, mode)).join('')}</div>` : `<div class="tw"><div class="empty">${empty}</div></div>`;
+const isU = v => String(v).startsWith('u:');
+const ukey = () => (ui.uview || 'lib').startsWith('folder') ? 'lib' : (ui.uview || 'lib');
+const uBody = () => { const uv = ui.uview || 'lib'; return (uv.startsWith('folder') ? uFolder : uv === 'history' ? uHistory : uv === 'contact' ? uContact : uv === 'mail' ? uMail : uv === 'ti' ? uTI : uv === 'mant' ? uMant : uLib)(); };
+const UG = u => { const bib = ['Biblioteca', [['lib', 'Biblioteca GILACA'], ['history', 'Historial'], ['mail', 'Correos'], ['contact', 'Contactar al administrador']]]; return [bib, u.role === 'admin_ti' ? ['Solicitud mantenimiento', [['mant', 'Mis solicitudes de mantenimiento']]] : ['Solicitud tecnología', [['ti', 'Mis solicitudes a TI']]]]; };
+const rolOf = r => RL[(S.users.find(x => x.id === r.uid) || {}).role] || '';
 function mShell(brand, nav, v, body, u) {
-  return `<div class="shell"><aside><div class="brand">${I.logo} <span>${brand}</span></div><nav>${nav.map(([a, l, n]) => `<button data-act="nav" data-v="${a}" class="${v === a ? 'on' : ''}">${l}${n ? `<span class="badge">${n}</span>` : ''}</button>`).join('')}</nav><div class="aside-foot"><div class="company">Ganadería Industrial Los Andes, C.A.</div><div style="font-weight:600">${esc(dn(u))}</div><div class="muted" style="font-size:12px;margin-bottom:6px">${RL[u.role]}</div><button class="link" data-act="logout">Cerrar sesión</button></div></aside><main>${body}</main></div>`;
+  const g = ui.grp || {}, inU = isU(v);
+  const groups = UG(u).map(([t, it]) => { const open = g[t] || (inU && it.some(x => x[0] === ukey())); return `<button data-act="grp" data-g="${t}"><span>${t}</span><span>${open ? '▾' : '▸'}</span></button>${open ? it.map(([k, l]) => `<button data-act="mu" data-v="${k}" class="${inU && ukey() === k ? 'on' : ''}" style="padding-left:28px;font-size:13px">${l}</button>`).join('') : ''}`; }).join('');
+  return `<div class="shell"><aside><div class="brand">${I.logo} <span>${brand}</span></div><nav>${nav.map(([a, l, n]) => `<button data-act="nav" data-v="${a}" class="${v === a ? 'on' : ''}">${l}${n ? `<span class="badge">${n}</span>` : ''}</button>`).join('')}<div style="height:1px;background:var(--line);margin:8px 0"></div>${groups}</nav><div class="aside-foot"><div class="company">Ganadería Industrial Los Andes, C.A.</div><div style="font-weight:600">${esc(dn(u))}</div><div class="muted" style="font-size:12px;margin-bottom:6px">${RL[u.role]}</div><button class="link" data-act="logout">Cerrar sesión</button></div></aside><main>${body}</main></div>`;
 }
+Object.assign(ACT, {
+  grp: t => { ui.grp = ui.grp || {}; ui.grp[t.dataset.g] = !ui.grp[t.dataset.g]; render(); },
+  mu: t => { ui.uview = t.dataset.v; ui.view = 'u:' + t.dataset.v; ui.rs = ui.rcat = ui.rdep = ''; render(); }
+});
 function viewSup() {
   const u = cur(), v = ui.view, area = u.role === 'sup_auto' ? 'auto' : 'infra';
   const inbox = S.mant.filter(r => (r.area || 'infra') === area && r.uid !== u.id && !r.rrole).sort((a, b) => b.ts - a.ts);
   const open = inbox.filter(r => r.state === 'enviada'), done = inbox.filter(r => r.state === 'terminada');
   const mine = S.mant.filter(r => r.uid === u.id).sort((a, b) => b.ts - a.ts);
-  const pend = [...inbox.filter(r => r.pedido && r.state !== 'terminada'), ...mine.filter(r => r.pedido)].sort((a, b) => (b.upd || b.ts) - (a.upd || a.ts));
-  const nav = [['recv', 'Solicitudes recibidas', open.length], ['pend', 'Solicitudes pendientes', pend.filter(r => r.state === 'pedido').length], ['mine', 'Mis solicitudes', 0], ['cuenta', 'Mi cuenta', 0]];
-  const body = v === 'cuenta' ? vCuenta() : v === 'pend'
-    ? `<div class="between"><div><h1>Solicitudes pendientes</h1><p class="sub">Planillas de pedido en curso. Envíalas al gerente de mantenimiento; cuando las acepte quedarán como <b>Por pasar a contaduría</b>.</p></div><button class="btn primary" data-act="pnew">Nueva solicitud de pedido</button></div>${pgrid(pend, 'sup', 'No hay solicitudes pendientes.')}`
+  const withP = [...inbox.filter(r => r.pedido && r.state !== 'terminada'), ...mine.filter(r => r.pedido)].sort((a, b) => (b.upd || b.ts) - (a.upd || a.ts));
+  const pend = withP.filter(r => r.state === 'pedido' || r.state === 'contaduria'), aprob = withP.filter(r => r.state === 'gerente');
+  const nav = [['recv', 'Solicitudes recibidas', open.length], ['pend', 'Solicitudes pendientes', pend.filter(r => r.state === 'pedido').length], ['aprob', 'Pendientes por aprobar', aprob.length], ['mine', 'Mis solicitudes', 0], ['cuenta', 'Mi cuenta', 0]];
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'aprob'
+    ? `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido que enviaste al gerente de mantenimiento y esperan su aprobación.</p>${pgrid(aprob, 'sup', 'No tienes solicitudes pendientes por aprobar.')}` : v === 'pend'
+    ? `<div class="between"><div><h1>Solicitudes pendientes</h1><p class="sub">Planillas de pedido por enviar al gerente de mantenimiento. Las aceptadas quedan aquí como <b>Por pasar a contaduría</b>.</p></div><button class="btn primary" data-act="pnew">Nueva solicitud de pedido</button></div>${pgrid(pend, 'sup', 'No hay solicitudes pendientes.')}`
     : v === 'mine'
     ? `<h1>Mis solicitudes</h1><p class="sub">Crea tu propia solicitud. Quedará registrada como ${SUP[u.role]}.</p><form data-form="mant" class="panel stack" style="max-width:640px"><label>Lugar<select name="place">${places().map(g => `<optgroup label="${g[0]}">${g[1].map(x => `<option>${esc(x)}</option>`).join('')}</optgroup>`).join('')}</select></label><label>¿Qué ocurre?<textarea name="text" rows="3" required></textarea></label><div><button class="btn primary">Enviar solicitud</button></div></form><h2>Enviadas por mí</h2>${supTable(mine, 'mine')}`
     : `<div class="between"><div><h1>Solicitudes recibidas</h1><p class="sub">Marca cada solicitud como <b>reparable</b> (pasa al historial como terminada) o como <b>requiere solicitud de pedido</b> (llenas la planilla F03-M05).${area === 'auto' ? ' Las solicitudes de automotriz se configuran en el siguiente paso.' : ''}</p></div><button class="btn" data-act="refresh">Actualizar</button></div><div class="stats"><div class="stat"><b>${open.length}</b><span>Por atender</span></div><div class="stat"><b>${pend.filter(r => r.state === 'pedido').length}</b><span>Pedidos por enviar</span></div><div class="stat"><b>${done.length}</b><span>Resueltas</span></div></div>${supTable(open, 'recv')}<h2>Historial de solicitudes resueltas</h2>${supTable(done, 'hist')}`;
@@ -1152,8 +1165,8 @@ function viewSup() {
 function viewGer() {
   const u = cur(), v = ui.view, all = S.mant.filter(r => r.pedido && (r.state === 'gerente' || r.state === 'contaduria')).sort((a, b) => (b.sent || b.ts) - (a.sent || a.ts));
   const q = all.filter(r => r.state === 'gerente'), acc = all.filter(r => r.state === 'contaduria');
-  const body = v === 'cuenta' ? vCuenta() : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste.</p>${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Solicitudes recibidas</h1><p class="sub">Revisa la planilla y acéptala para que quede por pasar a contaduría.</p>${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
-  return mShell('Gerencia de Mantenimiento', [['gq', 'Solicitudes recibidas', q.length], ['gacc', 'Por pasar a contaduría', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste.</p>${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría.</p>${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
+  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
 }
 let PNEW = null;
 Object.assign(ACT, {
@@ -1169,7 +1182,7 @@ function tiTable(rs, mode) {
   const A = { wait: [['proceso', 'En proceso', 'primary'], ['incompleta', 'Incompleta', '']], proc: [['terminada', 'Terminada', 'primary'], ['incompleta', 'Incompleta', '']], term: [['incompleta', 'Incompleta', '']], inc: [['proceso', 'En proceso', 'primary'], ['terminada', 'Terminada', '']] }[mode] || [];
   const act = r => `<button class="btn sm" data-act="tiver" data-id="${r.id}">Ver</button> ` + A.map(([st, l, c]) => `<button class="btn sm ${c}" data-act="tiset" data-id="${r.id}" data-s="${st}">${l}</button>`).join(' ');
   const H = ['Usuario', 'Categoría', 'Urgencia', 'Descripción', 'Fecha', 'Estado', ''];
-  return searchBox('tb_req', 'Buscar solicitudes…') + `<div class="tw"><table><thead><tr>${H.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody id="tb_req">${rs.map(r => `<tr data-q="${esc(norm([unm(r), r.dept, r.cat, r.text].join(' ')))}"><td><b>${esc(unm(r))}</b><div class="small">${esc(r.dept) || '—'}</div></td><td>${esc(r.cat)}</td><td><span class="pill ${r.urg === 'Alta' ? 'danger' : r.urg === 'Media' ? 'warn' : 'gray'}">${esc(r.urg)}</span></td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${fmt(r.ts)}</td><td>${stP('ti', r.state)}${r.seen && r.state === 'pendiente' ? ' <span class="pill gray">Vista</span>' : ''}${r.userDone && r.state !== 'cerrada' ? ' <span class="pill ok">Usuario confirmó</span>' : ''}</td><td style="text-align:right;white-space:nowrap">${act(r)}</td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>`;
+  return searchBox('tb_req', 'Buscar solicitudes…') + `<div class="tw"><table><thead><tr>${H.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody id="tb_req">${rs.map(r => `<tr data-q="${esc(norm([unm(r), r.dept, r.cat, r.text].join(' ')))}"><td><b>${esc(unm(r))}</b><div class="small">${esc(r.dept) || '—'}${rolOf(r) && rolOf(r) !== 'Usuario' ? ' · ' + rolOf(r) : ''}</div></td><td>${esc(r.cat)}</td><td><span class="pill ${r.urg === 'Alta' ? 'danger' : r.urg === 'Media' ? 'warn' : 'gray'}">${esc(r.urg)}</span></td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${fmt(r.ts)}</td><td>${stP('ti', r.state)}${r.seen && r.state === 'pendiente' ? ' <span class="pill gray">Vista</span>' : ''}${r.userDone && r.state !== 'cerrada' ? ' <span class="pill ok">Usuario confirmó</span>' : ''}</td><td style="text-align:right;white-space:nowrap">${act(r)}</td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>`;
 }
 function tiHist() {
   const h = ui.h || {}, all = S.ti.filter(r => r.state === 'cerrada' || r.state === 'aprobada');
@@ -1180,11 +1193,11 @@ function tiHist() {
   return `<h1>Historial</h1><p class="sub">Solicitudes cerradas (terminadas por TI y confirmadas por el usuario). Filtra y descarga lo que ves.</p><div class="row" style="flex-wrap:wrap;margin-bottom:12px">${sel('user', 'Todos los usuarios', users)}${sel('dept', 'Todos los departamentos', S.depts.map(d => [d, d]))}${sel('cat', 'Todas las categorías', TI_CATS.map(d => [d, d]))}${sel('urg', 'Toda urgencia', URG.map(d => [d, d]))}<label class="row">Desde<input type="date" data-chg="hfil" data-k="from" value="${h.from || ''}" style="width:auto"></label><label class="row">Hasta<input type="date" data-chg="hfil" data-k="to" value="${h.to || ''}" style="width:auto"></label><button class="btn sm" data-act="hclr">Limpiar</button><button class="btn sm primary" data-act="hcsv">Descargar historial</button></div>` + (rs.length ? searchBox('tb_hist', 'Buscar en el historial…') + `<div class="tw"><table><thead><tr>${H.map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody id="tb_hist">${rs.map(r => `<tr data-id="${r.id}" data-q="${esc(norm([unm(r), r.dept, r.cat, r.urg, r.text].join(' ')))}"><td class="muted">${fmt(r.ts)}</td><td><b>${esc(unm(r))}</b></td><td>${esc(r.dept) || '—'}</td><td>${esc(r.cat)}</td><td>${esc(r.urg)}</td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${T(r.seen)}</td><td class="muted">${T(r.procTs)}</td><td class="muted">${T(r.tiDone)}</td><td class="muted">${T(r.userDone)}</td><td class="muted">${T(r.closed)}</td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>` : '<div class="tw"><div class="empty">No hay solicitudes en el historial con estos filtros.</div></div>');
 }
 function viewTI() {
-  const u = cur(), v = (TIM[ui.view] || ['hist', 'cuenta'].includes(ui.view)) ? ui.view : 'wait', n = k => S.ti.filter(r => TIM[k].includes(r.state)).length;
+  const u = cur(), v = (TIM[ui.view] || ['hist', 'cuenta'].includes(ui.view) || isU(ui.view)) ? ui.view : 'wait', n = k => S.ti.filter(r => TIM[k].includes(r.state)).length;
   const nav = [['wait', 'Lista de espera', n('wait')], ['proc', 'En proceso', n('proc')], ['term', 'Terminadas', n('term')], ['inc', 'Incompletas', n('inc')], ['hist', 'Historial', 0], ['cuenta', 'Mi cuenta', 0]];
   const T = { wait: ['Lista de espera', 'Solicitudes nuevas. Al pulsar <b>Ver</b> el usuario verá que ya la abriste; pásala a <b>En proceso</b> cuando vayas en camino.'], proc: ['En proceso', 'Las que estás atendiendo. Márcalas <b>Terminada</b> al acabar.'], term: ['Terminadas', 'Esperando que el usuario confirme. Cuando lo haga pasan al historial.'], inc: ['Incompletas', 'Tareas que quedaron pendientes.'] };
-  const body = v === 'cuenta' ? vCuenta() : v === 'hist' ? tiHist() : `<div class="between"><div><h1>${T[v][0]}</h1><p class="sub">${T[v][1]}</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${tiTable(S.ti.filter(r => TIM[v].includes(r.state)).sort((a, b) => b.ts - a.ts), v)}`;
-  return mShell('Solicitudes TI', nav, TIM[v] || v === 'hist' || v === 'cuenta' ? v : 'wait', body, u);
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'hist' ? tiHist() : `<div class="between"><div><h1>${T[v][0]}</h1><p class="sub">${T[v][1]}</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${tiTable(S.ti.filter(r => TIM[v].includes(r.state)).sort((a, b) => b.ts - a.ts), v)}`;
+  return mShell('Solicitudes TI', nav, v, body, u);
 }
 Object.assign(ACT, {
   tiver: t => {
@@ -1289,11 +1302,11 @@ let NSEEN = null, unreadN = 0;
 function nItems() {
   const u = cur(), o = []; if (!u) return o;
   S.mails.filter(m => (m.to || []).includes(u.id)).forEach(m => o.push(['mail|' + m.id, 'Nuevo correo', m.subject || '']));
-  if (u.role === 'user') {
+  if (u.role !== 'admin') {
     S.docs.filter(d => canAccess(d, u)).forEach(d => o.push(['doc|' + d.id, 'Nuevo documento disponible', d.title]));
-    S.mant.filter(r => r.uid === u.id && (r.state === 'terminada' || r.state === 'pedido')).forEach(r => o.push(['ma|' + r.id + r.state, r.state === 'terminada' ? 'Tu solicitud de mantenimiento fue resuelta' : 'Tu solicitud pasó a solicitud de pedido', r.place]));
+    S.mant.filter(r => r.uid === u.id && !r.rrole && (r.state === 'terminada' || r.state === 'pedido')).forEach(r => o.push(['ma|' + r.id + r.state, r.state === 'terminada' ? 'Tu solicitud de mantenimiento fue resuelta' : 'Tu solicitud pasó a solicitud de pedido', r.place]));
   }
-  if (u.role === 'user') S.ti.filter(r => r.uid === u.id).forEach(r => { if (r.seen) o.push(['tv|' + r.id, 'TI vio tu solicitud', r.cat]); if (r.state === 'proceso') o.push(['tp|' + r.id, 'TI está atendiendo tu solicitud', r.cat]); if (r.tiDone && !r.userDone) o.push(['tt|' + r.id, 'TI terminó tu solicitud: confírmala', r.cat]); if (r.state === 'incompleta') o.push(['ti|' + r.id + 'i', 'Tu solicitud de TI quedó pendiente', r.cat]); });
+  if (u.role !== 'admin') S.ti.filter(r => r.uid === u.id).forEach(r => { if (r.seen) o.push(['tv|' + r.id, 'TI vio tu solicitud', r.cat]); if (r.state === 'proceso') o.push(['tp|' + r.id, 'TI está atendiendo tu solicitud', r.cat]); if (r.tiDone && !r.userDone) o.push(['tt|' + r.id, 'TI terminó tu solicitud: confírmala', r.cat]); if (r.state === 'incompleta') o.push(['ti|' + r.id + 'i', 'Tu solicitud de TI quedó pendiente', r.cat]); });
   if (u.role === 'gerente_mant') S.mant.filter(r => r.state === 'gerente').forEach(r => o.push(['mg|' + r.id, 'Nueva solicitud de pedido de ' + unm(r), r.place]));
   if (SUP[u.role]) S.mant.filter(r => r.state === 'contaduria' && (r.uid === u.id || (r.area || 'infra') === (u.role === 'sup_auto' ? 'auto' : 'infra'))).forEach(r => o.push(['mc|' + r.id, 'Solicitud de pedido aceptada: por pasar a contaduría', r.place]));
   if (u.role === 'admin') S.msgs.forEach(m => o.push(['msg|' + m.id, 'Nuevo mensaje de ' + m.uname, m.subject || '']));
