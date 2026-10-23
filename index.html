@@ -243,6 +243,14 @@ th{border-bottom:2px solid var(--brand-red)}
 .gw .btn:hover{background:rgba(255,255,255,.14)}
 .gw .btn.primary{background:linear-gradient(#d3180f,#b3120b);border-color:transparent;color:#fff;box-shadow:0 6px 14px rgba(190,20,12,.30)}
 .gw .link{color:#ff8a80}
+
+.pl{border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:10px;background:var(--bg)}
+.pl-h{display:flex;align-items:center;gap:12px;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:8px}.pl-h b{font-size:17px;letter-spacing:.06em}.pl-h span{font-size:11px;color:var(--muted)}
+.pl label{font-size:12px;display:grid;gap:3px}.pl .r2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}.pl .chk{display:flex;gap:14px;align-items:center;font-size:13px}.pl .chk label{display:flex;gap:5px;align-items:center}.pl .chk input{width:auto}
+.pl table{width:100%;border-collapse:collapse}.pl th{font-size:11px;padding:5px;border:1px solid var(--line);text-align:center}.pl td{padding:0;border:1px solid var(--line)}.pl td input{border:0;border-radius:0;width:100%;background:transparent}.pl td.n{width:36px;text-align:center;font-size:12px}
+.pl .sec{font-weight:700;font-size:12px;text-align:center;background:var(--accent-weak);color:var(--accent);padding:4px;border-radius:6px}.pl .ger{opacity:.55;display:grid;gap:8px;border:1px dashed var(--line);border-radius:8px;padding:10px}.pl .firma{border-bottom:1px solid var(--muted);height:30px;font-size:11px;color:var(--muted)}
+.pl-ia{display:grid;gap:8px;margin-bottom:12px;border:1px solid var(--line);border-radius:10px;padding:12px}
+@media(max-width:640px){.pl .r2{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -251,6 +259,7 @@ th{border-bottom:2px solid var(--brand-red)}
 <div id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.1.0/dist/tus.min.js"></script>
 <script>
 /* ============ Estado y persistencia ============ */
 const KEY = 'almacen_docs_v1';
@@ -283,7 +292,7 @@ function snapNow() {
   const m = {};
   for (const c in COLL) for (const x of COLL[c]()) m[c + '|' + x.id] = JSON.stringify(x);
   m['settings|lockdown'] = JSON.stringify({ v: !!S.lockdown });
-  S.users.forEach(u => m['users|' + u.id] = JSON.stringify({ name: u.name, dept: u.dept, role: u.role, download: u.download !== false }));
+  S.users.forEach(u => m['users|' + u.id] = JSON.stringify({ name: u.name, dept: u.dept, role: u.role, download: u.download !== false, full_name: u.full || '' }));
   return m;
 }
 let chain = Promise.resolve();
@@ -310,7 +319,7 @@ function save() {
 async function loadAll() {
   const [p, it] = await Promise.all([SB.from('profiles').select('*'), SB.from('items').select('coll,id,data').limit(5000)]);
   if (p.error || it.error) throw (p.error || it.error);
-  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download })), depts: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], lockdown: false };
+  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '' })), depts: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], lockdown: false };
   for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (S[r.coll]) S[r.coll].push(r.data); }
   SNAP = snapNow();
 }
@@ -323,17 +332,35 @@ async function enter() {
   try { await loadAll(); } catch (e) { toast('Error al cargar: ' + (e.message || e)); return; }
   const u = S.users.find(x => x.id === session.user.id);
   if (!u) { await SB.auth.signOut(); ui.user = null; ui.err = 'Tu cuenta fue eliminada'; return render(); }
-  ui.user = u.id; ui.err = ''; ui.view = u.role === 'admin' ? 'resumen' : 'all'; ui.uview = 'desk'; ui.rs = ui.rcat = ui.rdep = ''; NSEEN = null; notifyScan(); render();
+  ui.user = u.id; ui.err = ''; ui.view = u.role === 'admin' ? 'resumen' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'recv' : u.role === 'admin_ti' ? 'wait' : u.role === 'gerente_mant' ? 'gq' : 'all'; ui.uview = 'desk'; ui.rs = ui.rcat = ui.rdep = ''; ui.h = {}; NSEEN = null; notifyScan(); render(); rtStart();
 }
 /* Archivos: Supabase Storage (bucket privado "documentos") */
-const MAX_BYTES = 50 * 1024 * 1024;
-const idbPut = async (id, blob) => { const { error } = await SB.storage.from('documentos').upload(id, blob, { upsert: true, contentType: blob.type || 'application/octet-stream' }); if (error) throw error; };
+const MAX_BYTES = 10 * 1024 * 1024 * 1024;
+const idbPut = async (id, blob) => {
+  if (blob.size <= 40 * 1024 * 1024 || !window.tus) { const { error } = await SB.storage.from('documentos').upload(id, blob, { upsert: true, contentType: blob.type || 'application/octet-stream' }); if (error) throw error; return; }
+  /* Archivos grandes: subida reanudable por trozos de 6 MB */
+  const tok = async () => 'Bearer ' + (await SB.auth.getSession()).data.session.access_token;
+  await new Promise((res, rej) => {
+    const up = new tus.Upload(blob, {
+      endpoint: SB_URL.replace('.supabase.co', '.storage.supabase.co') + '/storage/v1/upload/resumable',
+      retryDelays: [0, 3000, 5000, 10000, 20000], chunkSize: 6 * 1024 * 1024, uploadDataDuringCreation: true, removeFingerprintOnSuccess: true,
+      headers: { 'x-upsert': 'true' },
+      metadata: { bucketName: 'documentos', objectName: id, contentType: blob.type || 'application/octet-stream', cacheControl: '3600' },
+      onBeforeRequest: async req => { req.setHeader('authorization', await tok()); },
+      onProgress: (a, b) => { const bt = $('#f_submit'); if (bt) bt.textContent = 'Subiendo… ' + Math.floor(a / b * 100) + '%'; },
+      onError: rej, onSuccess: res
+    });
+    up.findPreviousUploads().then(pv => { if (pv.length) up.resumeFromPreviousUpload(pv[0]); up.start(); });
+  });
+};
 const idbGet = async id => { const { data, error } = await SB.storage.from('documentos').download(id); return error ? null : data; };
 const idbDel = id => SB.storage.from('documentos').remove([id]).catch(() => {});
 try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
 
 const ui = { user: null, tab: 'login', view: 'resumen', uview: 'desk', logUser: '', err: '' };
 const cur = () => S.users.find(x => x.id === ui.user);
+const dn = u => (u && (u.full || u.name)) || '';
+const unm = r => dn(S.users.find(x => x.id === r.uid)) || r.uname || '';
 
 let tt;
 function toast(msg) {
@@ -355,7 +382,7 @@ function dlScope(d) {
   let t;
   if (d.vis === 'public') t = 'Aplica a todos los usuarios (' + who.length + ')';
   else if (d.vis === 'dept') t = 'Aplica a los ' + who.length + ' integrantes de ' + ((d.depts || []).join(', ') || '—');
-  else t = 'Solo para: ' + (who.slice(0, 3).map(u => u.name).join(', ') || 'nadie aún') + (who.length > 3 ? ' +' + (who.length - 3) : '');
+  else t = 'Solo para: ' + (who.slice(0, 3).map(dn).join(', ') || 'nadie aún') + (who.length > 3 ? ' +' + (who.length - 3) : '');
   if (blocked) t += ' · ' + blocked + ' bloqueado(s) en su perfil';
   return t;
 }
@@ -407,7 +434,7 @@ document.addEventListener('input', e => {
 /* ============ Modal / confirmación ============ */
 let confirmCb = null;
 function openModal(html) { $('#modal').innerHTML = `<div class="overlay" data-act="close">${html}</div>`; }
-function closeModal() { document.body.classList.remove('noprint-doc'); $('#modal').innerHTML = ''; revokeUrl('modal'); }
+function closeModal() { try { REC && REC.stop(); } catch (e) {} document.body.classList.remove('noprint-doc'); $('#modal').innerHTML = ''; revokeUrl('modal'); }
 function askConfirm(text, cb, label = 'Confirmar') {
   confirmCb = cb;
   openModal(`<div class="modal" style="max-width:420px"><div class="modal-b"><h2>${esc(text)}</h2></div><div class="modal-f"><button class="btn" data-act="close">Cancelar</button><button class="btn danger" data-act="doconfirm">${esc(label)}</button></div></div>`);
@@ -419,7 +446,7 @@ function render() {
   if (!ui.user) { app.className = ''; app.innerHTML = viewAuth(); return; }
   const u = cur(); if (!u) { ui.user = null; return render(); }
   app.className = u.role === 'admin' ? '' : 'gw';
-  app.innerHTML = u.role === 'admin' ? viewAdmin() : u.role === 'admin_ti' ? viewAdminMod('ti') : u.role === 'admin_mant' ? viewAdminMod('mant') : viewUser();
+  app.innerHTML = u.role === 'admin' ? viewAdmin() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser();
   if (u.role === 'admin' && ui.view === 'subir') initUpload();
 }
 
@@ -451,7 +478,7 @@ function viewAdmin() {
   return `<div class="shell"><aside>
     <div class="brand">${I.logo} <span>GilApp</span></div>
     <nav>${nav.map(([k, l]) => `<button data-act="nav" data-v="${k}" class="${ui.view === k ? 'on' : ''}">${l}${k === 'msgs' && unread ? `<span class="badge">${unread}</span>` : ''}</button>`).join('')}</nav>
-    <div class="aside-foot"><div class="company">Ganadería Industrial Los Andes, C.A.</div><div style="font-weight:600">${esc(cur().name)}</div><div class="muted" style="font-size:12px;margin-bottom:6px">Administrador · Biblioteca</div><button class="link" data-act="logout">Cerrar sesión</button></div>
+    <div class="aside-foot"><div class="company">Ganadería Industrial Los Andes, C.A.</div><div style="font-weight:600">${esc(dn(cur()))}</div><div class="muted" style="font-size:12px;margin-bottom:6px">Administrador · Biblioteca</div><button class="link" data-act="logout">Cerrar sesión</button></div>
   </aside><main>${V[ui.view]()}</main></div>`;
 }
 
@@ -473,7 +500,7 @@ function vResumen() {
       <label class="sw"><input type="checkbox" data-chg="lockdown" ${S.lockdown ? 'checked' : ''}><span></span></label></div>
   </div>
   <h2>Actividad reciente</h2>
-  ${recent.length ? `<div class="tw"><table><thead><tr><th>Usuario</th><th>Acción</th><th>Documento</th><th>Fecha</th></tr></thead><tbody>${recent.map(l => `<tr><td>${esc(l.uname)}</td><td>${l.type === 'open' ? 'Apertura' : 'Descarga'}</td><td>${esc(l.title)}</td><td class="muted">${fmt(l.ts)}</td></tr>`).join('')}</tbody></table></div>` : `<div class="tw"><div class="empty">Sin actividad todavía.</div></div>`}`;
+  ${recent.length ? `<div class="tw"><table><thead><tr><th>Usuario</th><th>Acción</th><th>Documento</th><th>Fecha</th></tr></thead><tbody>${recent.map(l => `<tr><td>${esc(unm(l))}</td><td>${l.type === 'open' ? 'Apertura' : 'Descarga'}</td><td>${esc(l.title)}</td><td class="muted">${fmt(l.ts)}</td></tr>`).join('')}</tbody></table></div>` : `<div class="tw"><div class="empty">Sin actividad todavía.</div></div>`}`;
 }
 
 function docVisCell(d) {
@@ -509,7 +536,7 @@ function vSubir() {
       <option value="public">Público (todos los usuarios)</option>
       <option value="private">Privado (un solo trabajador)</option>
       <option value="dept">Departamento</option></select></label>
-    <div id="f_priv" hidden><label>Trabajador<select id="f_user"><option value="">Selecciona…</option>${workers().map(u => `<option value="${u.id}">${esc(u.name)} · ${esc(u.dept) || 'Sin departamento'}</option>`).join('')}</select></label></div>
+    <div id="f_priv" hidden><label>Trabajador<select id="f_user"><option value="">Selecciona…</option>${workers().map(u => `<option value="${u.id}">${esc(dn(u))} · ${esc(u.dept) || 'Sin departamento'}</option>`).join('')}</select></label></div>
     <div id="f_dept" hidden><label>Departamentos</label><div class="row" style="flex-wrap:wrap;gap:6px 18px;margin-top:6px">${S.depts.map(d => `<label class="chk"><input type="checkbox" class="f_d" value="${esc(d)}"> ${esc(d)}</label>`).join('') || '<span class="muted">Crea departamentos primero.</span>'}</div></div>
     <label class="chk"><input type="checkbox" id="f_dl" checked> Permitir descargar</label>
     <label class="chk"><input type="checkbox" id="f_pr" checked> Permitir imprimir / guardar como PDF</label><div class="muted" style="font-size:12px;margin-top:-6px">${DL_HINT}</div>
@@ -551,7 +578,7 @@ async function submitUpload() {
   const vis = $('#f_vis').value;
   if (!file) return toast('Selecciona un archivo');
   if (!title) return toast('Escribe un título');
-  if (file.size > MAX_BYTES) return toast('El archivo supera 500 MB');
+  if (file.size > MAX_BYTES) return toast('El archivo supera 10 GB');
   const depts = $$('.f_d:checked').map(x => x.value);
   const userId = $('#f_user').value;
   if (vis === 'dept' && !depts.length) return toast('Selecciona al menos un departamento');
@@ -564,7 +591,7 @@ async function submitUpload() {
     vis, depts: vis === 'dept' ? depts : [], perms: vis === 'private' ? { [userId]: 'allow' } : {},
     download: $('#f_dl').checked, print: $('#f_pr').checked, fields: cards.map(c => ({ t: c.t, d: c.d })), created: Date.now(), status: 'active' };
   try { await idbPut(doc.id, file); }
-  catch (e) { btn.disabled = false; btn.textContent = 'Subir documento'; return toast('No hay espacio suficiente en el navegador para este archivo'); }
+  catch (e) { btn.disabled = false; btn.textContent = 'Subir documento'; return toast('No se pudo subir el archivo: ' + ((e && e.message) || e)); }
   S.docs.push(doc);
   if ($('#f_info').checked) { const o = { id: doc.id, dist: $$('.i_dist:checked').map(x => x.value) }; $$('.i_f').forEach(x => o[x.dataset.t] = x.value.trim()); S.docinfo.push(o); }
   const prevFixed = S.fixed;
@@ -579,7 +606,7 @@ function vUsers() {
   return `<div class="between"><div><h1>Usuarios</h1><p class="sub">Credenciales visibles solo para el administrador.</p></div><button class="btn primary" data-act="newuser">Nuevo usuario</button></div>
   <div class="tw"><table><thead><tr><th>Usuario</th><th>Contraseña</th><th>Departamento</th><th>Rol</th><th>Descarga</th><th>Aperturas / descargas</th><th></th></tr></thead><tbody>
   ${S.users.map(u => { const c = counts(u.id); return `<tr>
-    <td><b>${esc(u.name)}</b></td><td class="mono">${esc(u.pass)}</td><td>${esc(u.dept) || '<span class="muted">Sin asignar</span>'}</td>
+    <td><b>${esc(dn(u))}</b><div class="small">C.I. ${esc(u.name)}</div></td><td class="mono">${esc(u.pass)}</td><td>${esc(u.dept) || '<span class="muted">Sin asignar</span>'}</td>
     <td><span class="pill ${u.role === 'user' ? 'gray' : ''}">${RL[u.role] || 'Usuario'}</span></td>
     <td>${u.role !== 'user' ? '<span class="pill gray">—</span>' : `<span class="pill ${userDl(u) ? 'ok' : 'danger'}">${userDl(u) ? 'Activada' : 'Desactivada'}</span>`}</td>
     <td>${c.o} / ${c.d}</td>
@@ -595,11 +622,11 @@ function userForm(u) {
   openModal(`<div class="modal"><form data-form="user" data-id="${u.id || ''}">
     <div class="modal-h"><h2 style="margin:0">${e ? 'Editar usuario' : 'Nuevo usuario'}</h2></div>
     <div class="modal-b stack">
-      <label>Nombre de usuario<input name="name" value="${esc(u.name || '')}" required></label>
+      <label>Nombre y apellido<input name="full" value="${esc(u.full || '')}" required></label><label>Cédula (para iniciar sesión)<input name="name" value="${esc(u.name || '')}" required></label>
       <label>Contraseña<input name="pass" ${(u && u.id) ? 'disabled placeholder="Solo la cambia el propio usuario"' : 'required minlength="6"'}></label>
       <div class="grid2">
         <label>Departamento<select name="dept"><option value="" ${!u.dept ? 'selected' : ''}>Sin asignar</option>${S.depts.map(d => `<option ${u.dept === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></label>
-        <label>Rol<select name="role"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin Biblioteca</option><option value="admin_ti" ${u.role === 'admin_ti' ? 'selected' : ''}>Admin TI</option><option value="admin_mant" ${u.role === 'admin_mant' ? 'selected' : ''}>Admin Mantenimiento</option></select></label>
+        <label>Rol<select name="role"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin Biblioteca</option><option value="admin_ti" ${u.role === 'admin_ti' ? 'selected' : ''}>Admin TI</option><option value="sup_auto" ${u.role === 'sup_auto' ? 'selected' : ''}>Supervisor de Automotriz</option><option value="sup_infra" ${u.role === 'sup_infra' ? 'selected' : ''}>Supervisor de Infraestructura</option><option value="gerente_mant" ${u.role === 'gerente_mant' ? 'selected' : ''}>Gerente de Mantenimiento</option></select></label>
       </div>
       <div class="err" id="uerr" hidden></div>
     </div>
@@ -611,10 +638,10 @@ function userForm(u) {
 function vNewU() {
   return `<h1>Crear usuario</h1><p class="sub">Solo el administrador puede crear usuarios.</p>
   <div class="grid2" style="align-items:start"><form data-form="user" data-id="" class="panel stack">
-    <label>Nombre de usuario (cédula)<input name="name" required inputmode="numeric" pattern="[0-9]+" placeholder="Ej.: 12345678"></label>
+    <label>Nombre y apellido<input name="full" required placeholder="Ej.: María Pérez"></label><label>Cédula (para iniciar sesión)<input name="name" required inputmode="numeric" pattern="[0-9]+" placeholder="Ej.: 12345678"></label>
     <label>Contraseña<input name="pass" required minlength="8"></label>
     <label>Departamento<select name="dept"><option value="">Sin asignar</option>${S.depts.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
-    <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Admin Biblioteca</option><option value="admin_ti">Admin TI</option><option value="admin_mant">Admin Mantenimiento</option></select></label>
+    <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Admin Biblioteca</option><option value="admin_ti">Admin TI</option><option value="sup_auto">Supervisor de Automotriz</option><option value="sup_infra">Supervisor de Infraestructura</option><option value="gerente_mant">Gerente de Mantenimiento</option></select></label>
     <div class="err" id="uerr" hidden></div><div><button class="btn primary">Crear usuario</button></div></form>
   <div class="panel"><h3 style="margin-top:0">Reglas para crear un usuario</h3><ul style="padding-left:18px;line-height:1.7">
     <li>El nombre de usuario solo admite cifras numéricas: la <b>cédula</b>, que funciona como ID.</li>
@@ -632,7 +659,7 @@ function vMail() {
     <div class="search" style="margin:8px 0"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg><input type="search" id="m_search" placeholder="Buscar persona o departamento…" autocomplete="off"></div>
     <label class="chk" style="margin-bottom:6px"><input type="checkbox" id="m_all"> <b>Todo el personal</b></label>
     <div style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px">${groups.map(g => `<div class="m_grp"><div class="between" style="background:var(--bg);padding:7px 12px;border-bottom:1px solid var(--line)"><b style="font-size:13px">${esc(g.dep) || 'Sin departamento'}</b><label class="chk" style="font-size:12px"><input type="checkbox" class="m_dep"> Todo el departamento</label></div>
-      ${g.us.map(u => `<label class="m_row chk" data-q="${esc(norm(u.name + ' ' + (u.dept || '')))}" style="display:flex;padding:8px 12px;border-bottom:1px solid var(--line)"><input type="checkbox" class="m_to" value="${u.id}"> <span style="margin-left:8px">${esc(u.name)}</span></label>`).join('')}</div>`).join('') || '<div class="empty">No hay usuarios.</div>'}</div></div>
+      ${g.us.map(u => `<label class="m_row chk" data-q="${esc(norm(dn(u) + ' ' + u.name + ' ' + (u.dept || '')))}" style="display:flex;padding:8px 12px;border-bottom:1px solid var(--line)"><input type="checkbox" class="m_to" value="${u.id}"> <span style="margin-left:8px">${esc(dn(u))}</span></label>`).join('')}</div>`).join('') || '<div class="empty">No hay usuarios.</div>'}</div></div>
     <label>Asunto<input name="subject" required></label><label>Mensaje<textarea name="text" rows="6" required></textarea></label>
     <div><button class="btn primary">Enviar correo</button></div></form>
   ${sent.length ? `<h3 style="margin-top:22px">Enviados</h3>` + sent.map(m => `<div class="panel"><b>${esc(m.subject)}</b> <span class="muted">· para ${m.to.map(id => esc((S.users.find(x => x.id === id) || {}).name || '?')).join(', ')} · ${fmt(m.ts)}</span></div>`).join('') : ''}`;
@@ -645,7 +672,7 @@ const openBtn = d => d.revision ? '<span class="muted">En revisión</span>' : `<
 const INFO = ['Código', 'Nombre', 'Edición', 'Revisión', 'Fecha de edición', 'Fecha de revisión'];
 const infoBlock = () => `<div id="infoBlock" class="stack" hidden><div class="grid2">${INFO.map((t, i) => `<label>${t}<input class="i_f" data-t="${t}" ${i > 3 ? 'type="date"' : ''}></label>`).join('')}
   <label>Modalidad<select class="i_f" data-t="Modalidad"><option value="">—</option><option>Online</option><option>Presencial</option></select></label></div>
-  <div><label>Distribución (jefes de usuarios)</label><div class="row" style="flex-wrap:wrap;gap:6px 18px;margin-top:6px">${S.users.map(u => `<label class="chk"><input type="checkbox" class="i_dist" value="${esc(u.name)}"> ${esc(u.name)}</label>`).join('')}</div></div></div>`;
+  <div><label>Distribución (jefes de usuarios)</label><div class="row" style="flex-wrap:wrap;gap:6px 18px;margin-top:6px">${S.users.map(u => `<label class="chk"><input type="checkbox" class="i_dist" value="${esc(u.name)}"> ${esc(dn(u))}</label>`).join('')}</div></div></div>`;
 
 /* ---- Departamentos ---- */
 function vDepts() {
@@ -678,9 +705,9 @@ function vLog() {
   const logs = [...S.logs].reverse().filter(l => !ui.logUser || l.uid === ui.logUser).slice(0, 200);
   return `<h1>Historial</h1><p class="sub">Aperturas y descargas por trabajador.</p>
   <h2>Resumen por usuario</h2>
-  <div class="tw" style="margin-bottom:20px">${sum.length ? `<table><thead><tr><th>Usuario</th><th>Departamento</th><th>Aperturas</th><th>Descargas</th><th>Última actividad</th></tr></thead><tbody>${sum.map(s => `<tr><td><b>${esc(s.u.name)}</b></td><td>${esc(s.u.dept) || 'Sin asignar'}</td><td>${s.o}</td><td>${s.d}</td><td class="muted">${s.last ? fmt(s.last) : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">Sin usuarios.</div>`}</div>
-  <div class="between"><h2 style="margin:0">Detalle</h2><select data-chg="logfilter" style="width:220px"><option value="">Todos los usuarios</option>${ws.map(u => `<option value="${u.id}" ${ui.logUser === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></div>
-  <div class="tw" style="margin-top:10px">${logs.length ? `<table><thead><tr><th>Usuario</th><th>Acción</th><th>Documento</th><th>Fecha</th></tr></thead><tbody>${logs.map(l => `<tr><td>${esc(l.uname)}</td><td><span class="pill ${l.type === 'open' ? '' : 'warn'}">${l.type === 'open' ? 'Apertura' : 'Descarga'}</span></td><td>${esc(l.title)}</td><td class="muted">${fmt(l.ts)}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">Sin registros.</div>`}</div>`;
+  <div class="tw" style="margin-bottom:20px">${sum.length ? `<table><thead><tr><th>Usuario</th><th>Departamento</th><th>Aperturas</th><th>Descargas</th><th>Última actividad</th></tr></thead><tbody>${sum.map(s => `<tr><td><b>${esc(dn(s.u))}</b></td><td>${esc(s.u.dept) || 'Sin asignar'}</td><td>${s.o}</td><td>${s.d}</td><td class="muted">${s.last ? fmt(s.last) : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">Sin usuarios.</div>`}</div>
+  <div class="between"><h2 style="margin:0">Detalle</h2><select data-chg="logfilter" style="width:220px"><option value="">Todos los usuarios</option>${ws.map(u => `<option value="${u.id}" ${ui.logUser === u.id ? 'selected' : ''}>${esc(dn(u))}</option>`).join('')}</select></div>
+  <div class="tw" style="margin-top:10px">${logs.length ? `<table><thead><tr><th>Usuario</th><th>Acción</th><th>Documento</th><th>Fecha</th></tr></thead><tbody>${logs.map(l => `<tr><td>${esc(unm(l))}</td><td><span class="pill ${l.type === 'open' ? '' : 'warn'}">${l.type === 'open' ? 'Apertura' : 'Descarga'}</span></td><td>${esc(l.title)}</td><td class="muted">${fmt(l.ts)}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">Sin registros.</div>`}</div>`;
 }
 
 /* ---- Mensajes ---- */
@@ -688,7 +715,7 @@ function vMsgs() {
   const ms = [...S.msgs].reverse();
   return `<h1>Mensajes</h1><p class="sub">Solicitudes y comentarios enviados por los usuarios.</p>
   ${ms.length ? ms.map(m => `<div class="panel" style="${m.read ? '' : 'border-left:3px solid var(--accent)'}">
-    <div class="between"><div><b>${esc(m.subject || 'Sin asunto')}</b> <span class="muted">· ${esc(m.uname)}</span></div><span class="muted" style="font-size:12px">${fmt(m.ts)}</span></div>
+    <div class="between"><div><b>${esc(m.subject || 'Sin asunto')}</b> <span class="muted">· ${esc(unm(m))}</span></div><span class="muted" style="font-size:12px">${fmt(m.ts)}</span></div>
     <p style="margin:8px 0 12px;white-space:pre-wrap">${esc(m.text)}</p>
     <div class="row">${m.read ? '' : `<button class="btn sm" data-act="readmsg" data-id="${m.id}">Marcar como leído</button>`}<button class="btn sm danger" data-act="delmsg" data-id="${m.id}">Eliminar</button></div></div>`).join('') : `<div class="tw"><div class="empty">No hay mensajes.</div></div>`}`;
 }
@@ -724,7 +751,7 @@ function docPermModal(id, arch) {
         <div style="max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:8px">
         ${groups.length ? groups.map(g => `<div class="p_group"><div class="group-h"><span>${esc(g.dep)}</span>
           <select class="p_all" style="width:150px;padding:3px 6px;font-size:12px"><option value="">Aplicar a todos…</option><option value="">Por defecto</option><option value="allow">Permitir a todos</option><option value="deny">Denegar a todos</option></select></div>
-          ${g.us.map(u => `<div class="urow p_u" data-name="${esc(u.name.toLowerCase())}"><span>${esc(u.name)}</span><select class="p_sel" data-uid="${u.id}">
+          ${g.us.map(u => `<div class="urow p_u" data-name="${esc(u.name.toLowerCase())}"><span>${esc(dn(u))}</span><select class="p_sel" data-uid="${u.id}">
             <option value="">Por defecto</option><option value="allow" ${perm(d, u.id) === 'allow' ? 'selected' : ''}>Permitir</option><option value="deny" ${perm(d, u.id) === 'deny' ? 'selected' : ''}>Denegar</option></select></div>`).join('')}</div>`).join('') : '<div class="empty">No hay usuarios.</div>'}
         </div></div>
       <label class="chk"><input type="checkbox" id="p_pr" ${d.print !== false ? 'checked' : ''}> Permitir imprimir / guardar como PDF</label>
@@ -742,7 +769,7 @@ function userPermModal(id) {
   const u = S.users.find(x => x.id === id); if (!u) return;
   const docs = S.docs.filter(d => d.status === 'active');
   openModal(`<div class="modal wide" data-user="${u.id}">
-    <div class="modal-h"><h2 style="margin:0">Permisos de ${esc(u.name)}</h2><span class="muted">${esc(u.dept) || 'Sin departamento'}</span></div>
+    <div class="modal-h"><h2 style="margin:0">Permisos de ${esc(dn(u))}</h2><span class="muted">${esc(u.dept) || 'Sin departamento'}</span></div>
     <div class="modal-b">
       <div class="between" style="border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:14px">
         <div><b>Permitir descarga</b><div class="muted" style="font-size:12px">Apagado: este usuario no podrá descargar ningún documento, aunque el documento lo permita.</div></div>
@@ -763,7 +790,7 @@ function viewUser() {
   const V = ui.uview.startsWith('folder') ? uFolder : ui.uview === 'history' ? uHistory : ui.uview === 'contact' ? uContact : ui.uview === 'mail' ? uMail : ui.uview === 'lib' ? uLib : ui.uview === 'ti' ? uTI : ui.uview === 'mant' ? uMant : uDesk;
   return `<div class="top"><div class="brand">${I.logo} <span>GilApp</span></div>
     ${back}${inMod ? '' : `<nav>${nav.map(([k, l]) => `<button data-act="unav" data-v="${k}" class="${active === k ? 'on' : ''}">${l}</button>`).join('')}</nav>`}
-    <div class="right row"><span class="muted">${esc(u.name)} · ${esc(u.dept) || 'Sin departamento'}</span><button class="btn sm" data-act="logout">Salir</button></div></div>
+    <div class="right row"><span class="muted">${esc(dn(u))} · ${esc(u.dept) || 'Sin departamento'}</span><button class="btn sm" data-act="logout">Salir</button></div></div>
     <div class="page">${S.lockdown ? '<div class="notice">El acceso a los documentos está suspendido fuera del horario laboral.</div>' : ''}${V()}</div>`;
 }
 const myDocs = (u, vis) => S.docs.filter(d => d.vis === vis && canAccess(d, u));
@@ -875,7 +902,7 @@ async function getBlob(d) {
   if (!b) throw new Error('missing');
   return b;
 }
-function log(d, type) { const u = cur(); if (u.role === 'admin') return; S.logs.push({ id: uid(), uid: u.id, uname: u.name, docId: d.id, title: d.title, type, ts: Date.now() }); save(); }
+function log(d, type) { const u = cur(); if (u.role === 'admin') return; S.logs.push({ id: uid(), uid: u.id, uname: dn(u), docId: d.id, title: d.title, type, ts: Date.now() }); save(); }
 
 async function openDoc(id, asAdmin) {
   const d = S.docs.find(x => x.id === id); const u = cur(); if (!d) return;
@@ -982,19 +1009,19 @@ const FORM = {
     await enter();
   },
   user: async f => {
-    const id = f.dataset.id, n = f.name.value.trim(), e = $('#uerr');
+    const id = f.dataset.id, n = f.name.value.trim(), fl = f.full.value.trim(), e = $('#uerr');
     const bad = m => { e.textContent = m; e.hidden = false; };
     if (S.users.some(x => x.name.toLowerCase() === n.toLowerCase() && x.id !== id)) return bad('Ese nombre de usuario ya existe');
     if (!id && !/^\d+$/.test(n)) return bad('El nombre de usuario solo admite números (la cédula)');
     if (id) {
       const u = S.users.find(x => x.id === id);
       if (u.role === 'admin' && f.role.value !== 'admin' && S.users.filter(x => x.role === 'admin').length === 1) return bad('Debe existir al menos un administrador');
-      Object.assign(u, { name: n, dept: f.dept.value, role: f.role.value });
+      Object.assign(u, { name: n, full: fl, dept: f.dept.value, role: f.role.value });
     } else {
       if (f.pass.value.length < 8) return bad('La contraseña debe tener al menos 8 caracteres');
-      const { data: nid, error } = await SB.rpc('admin_create_user', { p_name: n, p_pass: f.pass.value, p_dept: f.dept.value, p_role: f.role.value });
+      const { data: nid, error } = await SB.rpc('admin_create_user', { p_name: n, p_pass: f.pass.value, p_dept: f.dept.value, p_role: f.role.value, p_full: fl });
       if (error || !nid) return bad(/duplicate|already/i.test(error?.message || '') ? 'Ese usuario ya existe' : (error?.message || 'No se pudo crear el usuario'));
-      S.users.push({ id: nid, name: n, dept: f.dept.value, role: f.role.value, download: true });
+      S.users.push({ id: nid, name: n, full: fl, dept: f.dept.value, role: f.role.value, download: true });
     }
     save(); closeModal(); if (!id) toast('Usuario creado'); render();
   },
@@ -1019,17 +1046,17 @@ const FORM = {
     save(); closeModal(); render();
   },
   mail: f => { const to = $$('.m_to:checked').map(c => c.value); if (!to.length) return toast('Elige al menos un destinatario'); S.mails.push({ id: uid(), to, subject: f.subject.value.trim(), text: f.text.value.trim(), ts: Date.now() }); save(); toast('Correo enviado'); render(); },
-  msg: f => { const u = cur(); S.msgs.push({ id: uid(), uid: u.id, uname: u.name, subject: f.subject.value.trim(), text: f.text.value.trim(), ts: Date.now(), read: false }); save(); toast('Mensaje enviado al administrador'); ui.uview = 'desk'; render(); }
+  msg: f => { const u = cur(); S.msgs.push({ id: uid(), uid: u.id, uname: dn(u), subject: f.subject.value.trim(), text: f.text.value.trim(), ts: Date.now(), read: false }); save(); toast('Mensaje enviado al administrador'); ui.uview = 'desk'; render(); }
 };
 
 /* ============ Módulos 2 (TI) y 3 (Mantenimiento) ============ */
-const RL = { admin: 'Admin Biblioteca', admin_ti: 'Admin TI', admin_mant: 'Admin Mantenimiento', user: 'Usuario' };
+const RL = { admin: 'Admin Biblioteca', admin_ti: 'Admin TI', admin_mant: 'Admin Mantenimiento', sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura', gerente_mant: 'Gerente de Mantenimiento', user: 'Usuario' };
 const TI_CATS = ['Falla de impresora', 'Falta de tinta / tóner', 'Falta de papel', 'Caída de internet', 'Falla de computadora', 'Problema con el correo', 'Sin acceso a sistema o clave', 'Instalación de software', 'Teléfono / telefonía', 'Otro'];
 const URG = ['Baja', 'Media', 'Alta'];
 const places = () => [['General', ['Comedor', 'Recepción', 'Estacionamiento', 'Otro lugar']], ['Oficinas', S.depts.map(d => 'Oficina de ' + d)], ['Baños', S.depts.map(d => 'Baño de ' + d)]];
 const CFG = {
-  ti: { t: 'Solicitudes TI', f: 'cat', fl: 'Categoría', opts: () => TI_CATS, st: [['pendiente', 'Pendientes', 'warn', 'Pendiente'], ['aprobada', 'Aprobadas', 'ok', 'Aprobada'], ['incompleta', 'Incompletas', 'danger', 'Incompleta']] },
-  mant: { t: 'Solicitudes de mantenimiento', f: 'place', fl: 'Lugar', opts: () => places().flatMap(g => g[1]), st: [['enviada', 'Nuevas', 'warn', 'Enviada'], ['atencion', 'En atención', '', 'En atención'], ['aceptada', 'Aceptadas', 'ok', 'Aceptada'], ['pendiente', 'Pendientes', 'danger', 'Pendiente']] }
+  ti: { t: 'Solicitudes TI', f: 'cat', fl: 'Categoría', opts: () => TI_CATS, st: [['pendiente', 'En espera', 'warn', 'En espera'], ['proceso', 'En proceso', '', 'En proceso'], ['terminada', 'Terminadas por TI', 'ok', 'Terminada por TI'], ['incompleta', 'Incompletas', 'danger', 'Incompleta'], ['cerrada', 'Cerradas', 'ok', 'Cerrada'], ['aprobada', 'Aprobadas (anteriores)', 'ok', 'Aprobada']] },
+  mant: { t: 'Solicitudes de mantenimiento', f: 'place', fl: 'Lugar', opts: () => places().flatMap(g => g[1]), st: [['enviada', 'Enviadas', 'warn', 'Enviada'], ['terminada', 'Terminadas', 'ok', 'Terminada'], ['pedido', 'En pedido', '', 'Solicitud de pedido'], ['gerente', 'Con el gerente', 'warn', 'Enviada al gerente'], ['contaduria', 'Por pasar a contaduría', 'ok', 'Por pasar a contaduría'], ['atencion', 'En atención', '', 'En atención'], ['aceptada', 'Aceptadas', 'ok', 'Aceptada'], ['pendiente', 'Pendientes', 'danger', 'Pendiente']] }
 };
 I.pc = '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
 I.wrench = '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5 5L3 18l3 3 6.5-6.5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z"/></svg>';
@@ -1041,15 +1068,15 @@ function fbar(k, adm) {
 }
 function uActs(r, k) {
   const b = (s, l) => r.state === s ? '' : `<button class="btn sm" data-act="rset" data-c="${k}" data-id="${r.id}" data-s="${s}">${l}</button>`;
-  if (k === 'ti') return b('aprobada', 'Aprobada') + ' ' + b('pendiente', 'Pendiente') + ' ' + b('incompleta', 'Incompleta');
-  if (r.state === 'enviada') return '<span class="muted">Esperando al administrador</span>';
-  return r.state === 'atencion' || r.state === 'pendiente' ? b('aceptada', 'Marcar aceptada') + ' ' + b('pendiente', 'Marcar pendiente') : '';
+  if (k === 'ti') return (r.state === 'proceso' || r.state === 'terminada') && !r.userDone ? `<button class="btn sm primary" data-act="tiuser" data-id="${r.id}">Dar por terminada</button>` : r.userDone && r.state !== 'cerrada' ? '<span class="muted">Esperando a TI</span>' : '';
+  if (r.state === 'enviada') return '<span class="muted">Esperando al supervisor</span>';
+  return r.state === 'atencion' ? b('aceptada', 'Marcar aceptada') + ' ' + b('pendiente', 'Marcar pendiente') : '';
 }
 function reqTable(k, rs, adm) {
   const c = CFG[k], H = [...(adm ? ['Usuario', 'Departamento'] : []), c.fl, ...(k === 'ti' ? ['Urgencia'] : []), 'Descripción', 'Fecha', 'Estado', ''];
   const act = r => adm ? (k === 'mant' && (r.state === 'enviada' || r.state === 'pendiente') ? `<button class="btn sm primary" data-act="rset" data-c="mant" data-id="${r.id}" data-s="atencion">${r.state === 'enviada' ? 'Aceptar' : 'Retomar'}</button>` : '') : uActs(r, k);
   if (!rs.length) return `<div class="tw"><div class="empty">No hay solicitudes.</div></div>`;
-  return searchBox('tb_req', 'Buscar solicitudes…') + `<div class="tw"><table><thead><tr>${H.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody id="tb_req">${rs.map(r => `<tr data-q="${esc(norm([r.uname, r.dept, r[c.f], r.text].join(' ')))}">${adm ? `<td><b>${esc(r.uname)}</b></td><td>${esc(r.dept) || '—'}</td>` : ''}<td>${esc(r[c.f])}</td>${k === 'ti' ? `<td><span class="pill ${r.urg === 'Alta' ? 'danger' : r.urg === 'Media' ? 'warn' : 'gray'}">${esc(r.urg)}</span></td>` : ''}<td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${fmt(r.ts)}</td><td>${stP(k, r.state)}</td><td style="text-align:right;white-space:nowrap">${act(r)}</td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>`;
+  return searchBox('tb_req', 'Buscar solicitudes…') + `<div class="tw"><table><thead><tr>${H.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody id="tb_req">${rs.map(r => `<tr data-q="${esc(norm([r.uname, r.dept, r[c.f], r.text].join(' ')))}">${adm ? `<td><b>${esc(unm(r))}</b></td><td>${esc(r.dept) || '—'}</td>` : ''}<td>${esc(r[c.f])}</td>${k === 'ti' ? `<td><span class="pill ${r.urg === 'Alta' ? 'danger' : r.urg === 'Media' ? 'warn' : 'gray'}">${esc(r.urg)}</span></td>` : ''}<td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${fmt(r.ts)}</td><td>${stP(k, r.state)}${k === 'ti' && r.seen && r.state === 'pendiente' ? ' <span class="pill gray">Vista por TI</span>' : ''}</td><td style="text-align:right;white-space:nowrap">${act(r)}</td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>`;
 }
 function uReq(k) {
   const u = cur(), c = CFG[k], mine = S[k].filter(r => r.uid === u.id), rs = rows(k).filter(r => r.uid === u.id);
@@ -1062,7 +1089,7 @@ function uReq(k) {
 }
 const uTI = () => uReq('ti'), uMant = () => uReq('mant');
 function uDesk() {
-  const u = cur(), open = k => S[k].filter(r => r.uid === u.id && r.state !== 'aprobada' && r.state !== 'aceptada').length;
+  const u = cur(), open = k => S[k].filter(r => r.uid === u.id && !['aprobada', 'aceptada', 'cerrada'].includes(r.state) && !(k === 'mant' && r.state === 'terminada')).length;
   const mods = [['lib', 'Biblioteca GILACA', 'Documentos públicos, tuyos y de tu departamento', I.globe], ['ti', 'Solicitudes TI', 'Impresora, internet, tinta, papel y más', I.pc], ['mant', 'Solicitudes de mantenimiento', 'Oficinas, comedor, baños y otros lugares', I.wrench]];
   return `<h1>Inicio</h1><p class="sub">Elige un módulo.</p><div class="folders">${mods.map(([k, t, s, ic]) => `<button class="folder" data-act="unav" data-v="${k}">${ic}<b>${t}</b><span>${s}${k !== 'lib' && open(k) ? ' · ' + open(k) + ' en curso' : ''}</span></button>`).join('')}</div>`;
 }
@@ -1071,9 +1098,9 @@ function viewAdminMod(k) {
   const nav = [['all', 'Todas', S[k].length], ...c.st.map(s => [s[0], s[1], cnt(s[0])]), ['cuenta', 'Mi cuenta', 0]];
   ui.rs = (v === 'all' || v === 'cuenta') ? '' : v;
   const body = v === 'cuenta' ? vCuenta() : `<div class="between"><div><h1>${c.t}</h1><p class="sub">${k === 'ti' ? 'Solicitudes recibidas. El usuario marca el resultado final.' : 'Acepta las solicitudes; el usuario las marca como aceptadas o pendientes al terminar.'}</p></div><button class="btn" data-act="refresh">Actualizar</button></div><div class="stats">${c.st.map(s => `<div class="stat"><b>${cnt(s[0])}</b><span>${s[1]}</span></div>`).join('')}</div>${fbar(k, 1)}${reqTable(k, rows(k), 1)}`;
-  return `<div class="shell"><aside><div class="brand">${I.logo} <span>${c.t}</span></div><nav>${nav.map(([a, l, n]) => `<button data-act="nav" data-v="${a}" class="${v === a ? 'on' : ''}">${l}${n ? `<span class="badge">${n}</span>` : ''}</button>`).join('')}</nav><div class="aside-foot"><div class="company">Ganadería Industrial Los Andes, C.A.</div><div style="font-weight:600">${esc(u.name)}</div><div class="muted" style="font-size:12px;margin-bottom:6px">${RL[u.role]}</div><button class="link" data-act="logout">Cerrar sesión</button></div></aside><main>${body}</main></div>`;
+  return `<div class="shell"><aside><div class="brand">${I.logo} <span>${c.t}</span></div><nav>${nav.map(([a, l, n]) => `<button data-act="nav" data-v="${a}" class="${v === a ? 'on' : ''}">${l}${n ? `<span class="badge">${n}</span>` : ''}</button>`).join('')}</nav><div class="aside-foot"><div class="company">Ganadería Industrial Los Andes, C.A.</div><div style="font-weight:600">${esc(dn(u))}</div><div class="muted" style="font-size:12px;margin-bottom:6px">${RL[u.role]}</div><button class="link" data-act="logout">Cerrar sesión</button></div></aside><main>${body}</main></div>`;
 }
-function mkReq(f, k, x, st, msg) { const u = cur(); S[k].push({ id: uid(), uid: u.id, uname: u.name, dept: u.dept || '', ...x, text: f.text.value.trim(), state: st, ts: Date.now() }); save(); toast(msg); render(); }
+function mkReq(f, k, x, st, msg) { const u = cur(); S[k].push({ id: uid(), uid: u.id, uname: dn(u), dept: u.dept || '', ...(SUP[u.role] ? { rrole: u.role, area: 'gerencia' } : {}), ...x, text: f.text.value.trim(), state: st, ts: Date.now() }); save(); toast(msg); render(); }
 Object.assign(ACT, {
   rset: t => { const r = S[t.dataset.c].find(x => x.id === t.dataset.id); if (!r) return; r.state = t.dataset.s; r.upd = Date.now(); save(); toast('Estado actualizado'); render(); },
   rst: t => { ui.rs = t.dataset.s; render(); },
@@ -1085,6 +1112,178 @@ Object.assign(FORM, {
   ti: f => mkReq(f, 'ti', { cat: f.cat.value, urg: f.urg.value }, 'pendiente', 'Solicitud enviada a TI'),
   mant: f => mkReq(f, 'mant', { place: f.place.value }, 'enviada', 'Solicitud enviada a mantenimiento')
 });
+
+/* ============ Supervisores de mantenimiento (S1 Automotriz · S2 Infraestructura) ============ */
+const SUP = { sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura' };
+const rolTag = r => r.rrole ? `<div class="small">${SUP[r.rrole]}</div>` : '<div class="small">Usuario</div>';
+function supTable(rs, mode) {
+  if (!rs.length) return `<div class="tw"><div class="empty">${mode === 'mine' ? 'Aún no has enviado solicitudes.' : 'No hay solicitudes.'}</div></div>`;
+  const H = mode === 'mine' ? ['Lugar', 'Descripción', 'Fecha', 'Estado'] : ['Solicitante', 'Departamento', 'Lugar', 'Descripción', 'Fecha', 'Estado', ''];
+  const act = r => r.state === 'enviada' && mode === 'recv' ? `<button class="btn sm primary" data-act="sres" data-id="${r.id}">Reparable</button> <button class="btn sm" data-act="sped" data-id="${r.id}">Requiere solicitud de pedido</button>` : r.pedido ? `<button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button>` : '';
+  const row = r => mode === 'mine'
+    ? `<td>${esc(r.place)}</td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${fmt(r.ts)}</td><td>${stP('mant', r.state)}</td>`
+    : `<td><b>${esc(unm(r))}</b>${rolTag(r)}</td><td>${esc(r.dept) || '—'}</td><td>${esc(r.place)}</td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${fmt(r.ts)}</td><td>${stP('mant', r.state)}</td><td style="text-align:right">${act(r)}</td>`;
+  return searchBox('tb_req', 'Buscar solicitudes…') + `<div class="tw"><table><thead><tr>${H.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody id="tb_req">${rs.map(r => `<tr data-q="${esc(norm([r.uname, r.dept, r.place, r.text].join(' ')))}">${row(r)}</tr>`).join('')}${NORES(H.length)}</tbody></table></div>`;
+}
+
+function pcard(r, mode) {
+  const p = r.pedido || {}, its = p.items || [];
+  const acts = mode === 'ger' ? (r.state === 'gerente' ? `<button class="btn sm primary" data-act="gacept" data-id="${r.id}">Aceptar</button>` : '') : r.state === 'pedido' ? `<button class="btn sm" data-act="sped" data-id="${r.id}">Editar planilla</button> <button class="btn sm primary" data-act="sger" data-id="${r.id}">Enviar al gerente de mantenimiento</button>` : '';
+  return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.rrole ? SUP[r.rrole] : 'Usuario'}</div></div>${stP('mant', r.state)}</div><div class="muted" style="font-size:13px">${p.tipo === 'servicio' ? 'Servicio' : 'Compra'} · ${esc(p.unidad || '—')} · Centro de costos: ${esc(p.centro || '—')} · ${fmt(p.ts || r.ts)}</div><div style="font-size:13px">${its.slice(0, 4).map(x => '• ' + esc(x.desc) + ' — ' + esc(x.cant) + ' ' + esc(x.um)).join('<br>')}${its.length > 4 ? '<br>+' + (its.length - 4) + ' más' : ''}</div><div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button>${acts}</div></div>`;
+}
+const pgrid = (rs, mode, empty) => rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(r => pcard(r, mode)).join('')}</div>` : `<div class="tw"><div class="empty">${empty}</div></div>`;
+function mShell(brand, nav, v, body, u) {
+  return `<div class="shell"><aside><div class="brand">${I.logo} <span>${brand}</span></div><nav>${nav.map(([a, l, n]) => `<button data-act="nav" data-v="${a}" class="${v === a ? 'on' : ''}">${l}${n ? `<span class="badge">${n}</span>` : ''}</button>`).join('')}</nav><div class="aside-foot"><div class="company">Ganadería Industrial Los Andes, C.A.</div><div style="font-weight:600">${esc(dn(u))}</div><div class="muted" style="font-size:12px;margin-bottom:6px">${RL[u.role]}</div><button class="link" data-act="logout">Cerrar sesión</button></div></aside><main>${body}</main></div>`;
+}
+function viewSup() {
+  const u = cur(), v = ui.view, area = u.role === 'sup_auto' ? 'auto' : 'infra';
+  const inbox = S.mant.filter(r => (r.area || 'infra') === area && r.uid !== u.id && !r.rrole).sort((a, b) => b.ts - a.ts);
+  const open = inbox.filter(r => r.state === 'enviada'), done = inbox.filter(r => r.state === 'terminada');
+  const mine = S.mant.filter(r => r.uid === u.id).sort((a, b) => b.ts - a.ts);
+  const pend = [...inbox.filter(r => r.pedido && r.state !== 'terminada'), ...mine.filter(r => r.pedido)].sort((a, b) => (b.upd || b.ts) - (a.upd || a.ts));
+  const nav = [['recv', 'Solicitudes recibidas', open.length], ['pend', 'Solicitudes pendientes', pend.filter(r => r.state === 'pedido').length], ['mine', 'Mis solicitudes', 0], ['cuenta', 'Mi cuenta', 0]];
+  const body = v === 'cuenta' ? vCuenta() : v === 'pend'
+    ? `<div class="between"><div><h1>Solicitudes pendientes</h1><p class="sub">Planillas de pedido en curso. Envíalas al gerente de mantenimiento; cuando las acepte quedarán como <b>Por pasar a contaduría</b>.</p></div><button class="btn primary" data-act="pnew">Nueva solicitud de pedido</button></div>${pgrid(pend, 'sup', 'No hay solicitudes pendientes.')}`
+    : v === 'mine'
+    ? `<h1>Mis solicitudes</h1><p class="sub">Crea tu propia solicitud. Quedará registrada como ${SUP[u.role]}.</p><form data-form="mant" class="panel stack" style="max-width:640px"><label>Lugar<select name="place">${places().map(g => `<optgroup label="${g[0]}">${g[1].map(x => `<option>${esc(x)}</option>`).join('')}</optgroup>`).join('')}</select></label><label>¿Qué ocurre?<textarea name="text" rows="3" required></textarea></label><div><button class="btn primary">Enviar solicitud</button></div></form><h2>Enviadas por mí</h2>${supTable(mine, 'mine')}`
+    : `<div class="between"><div><h1>Solicitudes recibidas</h1><p class="sub">Marca cada solicitud como <b>reparable</b> (pasa al historial como terminada) o como <b>requiere solicitud de pedido</b> (llenas la planilla F03-M05).${area === 'auto' ? ' Las solicitudes de automotriz se configuran en el siguiente paso.' : ''}</p></div><button class="btn" data-act="refresh">Actualizar</button></div><div class="stats"><div class="stat"><b>${open.length}</b><span>Por atender</span></div><div class="stat"><b>${pend.filter(r => r.state === 'pedido').length}</b><span>Pedidos por enviar</span></div><div class="stat"><b>${done.length}</b><span>Resueltas</span></div></div>${supTable(open, 'recv')}<h2>Historial de solicitudes resueltas</h2>${supTable(done, 'hist')}`;
+  return mShell('Mantenimiento', nav, v, body, u);
+}
+function viewGer() {
+  const u = cur(), v = ui.view, all = S.mant.filter(r => r.pedido && (r.state === 'gerente' || r.state === 'contaduria')).sort((a, b) => (b.sent || b.ts) - (a.sent || a.ts));
+  const q = all.filter(r => r.state === 'gerente'), acc = all.filter(r => r.state === 'contaduria');
+  const body = v === 'cuenta' ? vCuenta() : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste.</p>${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Solicitudes recibidas</h1><p class="sub">Revisa la planilla y acéptala para que quede por pasar a contaduría.</p>${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
+  return mShell('Gerencia de Mantenimiento', [['gq', 'Solicitudes recibidas', q.length], ['gacc', 'Por pasar a contaduría', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
+}
+let PNEW = null;
+Object.assign(ACT, {
+  pnew: () => { const u = cur(); PNEW = { id: uid(), uid: u.id, uname: dn(u), dept: u.dept || '', rrole: u.role, area: 'gerencia', place: 'Solicitud de pedido propia', text: '', state: 'borrador', ts: Date.now() }; ACT.sped({ dataset: { id: PNEW.id } }); },
+  sger: t => askConfirm('¿Enviar esta solicitud de pedido al gerente de mantenimiento?', () => { const r = S.mant.find(x => x.id === t.dataset.id); if (!r) return; r.state = 'gerente'; r.sent = r.upd = Date.now(); save(); toast('Enviada al gerente'); render(); }, 'Enviar'),
+  gacept: t => askConfirm('¿Aceptar esta solicitud de pedido? Quedará como "Por pasar a contaduría".', () => { const r = S.mant.find(x => x.id === t.dataset.id); if (!r) return; r.state = 'contaduria'; r.acc = r.upd = Date.now(); r.accBy = dn(cur()); save(); toast('Solicitud aceptada'); render(); }, 'Aceptar')
+});
+
+/* ============ Solicitudes TI (A2): espera → proceso → terminada → historial ============ */
+const TIM = { wait: ['pendiente'], proc: ['proceso'], term: ['terminada'], inc: ['incompleta'] };
+function tiTable(rs, mode) {
+  if (!rs.length) return '<div class="tw"><div class="empty">No hay solicitudes.</div></div>';
+  const A = { wait: [['proceso', 'En proceso', 'primary'], ['incompleta', 'Incompleta', '']], proc: [['terminada', 'Terminada', 'primary'], ['incompleta', 'Incompleta', '']], term: [['incompleta', 'Incompleta', '']], inc: [['proceso', 'En proceso', 'primary'], ['terminada', 'Terminada', '']] }[mode] || [];
+  const act = r => `<button class="btn sm" data-act="tiver" data-id="${r.id}">Ver</button> ` + A.map(([st, l, c]) => `<button class="btn sm ${c}" data-act="tiset" data-id="${r.id}" data-s="${st}">${l}</button>`).join(' ');
+  const H = ['Usuario', 'Categoría', 'Urgencia', 'Descripción', 'Fecha', 'Estado', ''];
+  return searchBox('tb_req', 'Buscar solicitudes…') + `<div class="tw"><table><thead><tr>${H.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody id="tb_req">${rs.map(r => `<tr data-q="${esc(norm([unm(r), r.dept, r.cat, r.text].join(' ')))}"><td><b>${esc(unm(r))}</b><div class="small">${esc(r.dept) || '—'}</div></td><td>${esc(r.cat)}</td><td><span class="pill ${r.urg === 'Alta' ? 'danger' : r.urg === 'Media' ? 'warn' : 'gray'}">${esc(r.urg)}</span></td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${fmt(r.ts)}</td><td>${stP('ti', r.state)}${r.seen && r.state === 'pendiente' ? ' <span class="pill gray">Vista</span>' : ''}${r.userDone && r.state !== 'cerrada' ? ' <span class="pill ok">Usuario confirmó</span>' : ''}</td><td style="text-align:right;white-space:nowrap">${act(r)}</td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>`;
+}
+function tiHist() {
+  const h = ui.h || {}, all = S.ti.filter(r => r.state === 'cerrada' || r.state === 'aprobada');
+  const rs = all.filter(r => (!h.user || r.uid === h.user) && (!h.dept || r.dept === h.dept) && (!h.cat || r.cat === h.cat) && (!h.urg || r.urg === h.urg) && (!h.from || r.ts >= new Date(h.from + 'T00:00:00').getTime()) && (!h.to || r.ts <= new Date(h.to + 'T23:59:59').getTime())).sort((a, b) => (b.closed || b.ts) - (a.closed || a.ts));
+  const sel = (k, l, o) => `<select data-chg="hfil" data-k="${k}" style="width:auto;min-width:150px"><option value="">${l}</option>${o.map(([v, t]) => `<option value="${esc(v)}" ${h[k] === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+  const users = [...new Map(all.map(r => [r.uid, [r.uid, unm(r)]])).values()];
+  const T = v => v ? fmt(v) : '—', H = ['Fecha', 'Usuario', 'Departamento', 'Categoría', 'Urgencia', 'Descripción', 'Vista', 'En proceso', 'Terminada TI', 'Confirmada usuario', 'Cerrada'];
+  return `<h1>Historial</h1><p class="sub">Solicitudes cerradas (terminadas por TI y confirmadas por el usuario). Filtra y descarga lo que ves.</p><div class="row" style="flex-wrap:wrap;margin-bottom:12px">${sel('user', 'Todos los usuarios', users)}${sel('dept', 'Todos los departamentos', S.depts.map(d => [d, d]))}${sel('cat', 'Todas las categorías', TI_CATS.map(d => [d, d]))}${sel('urg', 'Toda urgencia', URG.map(d => [d, d]))}<label class="row">Desde<input type="date" data-chg="hfil" data-k="from" value="${h.from || ''}" style="width:auto"></label><label class="row">Hasta<input type="date" data-chg="hfil" data-k="to" value="${h.to || ''}" style="width:auto"></label><button class="btn sm" data-act="hclr">Limpiar</button><button class="btn sm primary" data-act="hcsv">Descargar historial</button></div>` + (rs.length ? searchBox('tb_hist', 'Buscar en el historial…') + `<div class="tw"><table><thead><tr>${H.map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody id="tb_hist">${rs.map(r => `<tr data-id="${r.id}" data-q="${esc(norm([unm(r), r.dept, r.cat, r.urg, r.text].join(' ')))}"><td class="muted">${fmt(r.ts)}</td><td><b>${esc(unm(r))}</b></td><td>${esc(r.dept) || '—'}</td><td>${esc(r.cat)}</td><td>${esc(r.urg)}</td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${T(r.seen)}</td><td class="muted">${T(r.procTs)}</td><td class="muted">${T(r.tiDone)}</td><td class="muted">${T(r.userDone)}</td><td class="muted">${T(r.closed)}</td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>` : '<div class="tw"><div class="empty">No hay solicitudes en el historial con estos filtros.</div></div>');
+}
+function viewTI() {
+  const u = cur(), v = (TIM[ui.view] || ['hist', 'cuenta'].includes(ui.view)) ? ui.view : 'wait', n = k => S.ti.filter(r => TIM[k].includes(r.state)).length;
+  const nav = [['wait', 'Lista de espera', n('wait')], ['proc', 'En proceso', n('proc')], ['term', 'Terminadas', n('term')], ['inc', 'Incompletas', n('inc')], ['hist', 'Historial', 0], ['cuenta', 'Mi cuenta', 0]];
+  const T = { wait: ['Lista de espera', 'Solicitudes nuevas. Al pulsar <b>Ver</b> el usuario verá que ya la abriste; pásala a <b>En proceso</b> cuando vayas en camino.'], proc: ['En proceso', 'Las que estás atendiendo. Márcalas <b>Terminada</b> al acabar.'], term: ['Terminadas', 'Esperando que el usuario confirme. Cuando lo haga pasan al historial.'], inc: ['Incompletas', 'Tareas que quedaron pendientes.'] };
+  const body = v === 'cuenta' ? vCuenta() : v === 'hist' ? tiHist() : `<div class="between"><div><h1>${T[v][0]}</h1><p class="sub">${T[v][1]}</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${tiTable(S.ti.filter(r => TIM[v].includes(r.state)).sort((a, b) => b.ts - a.ts), v)}`;
+  return mShell('Solicitudes TI', nav, TIM[v] || v === 'hist' || v === 'cuenta' ? v : 'wait', body, u);
+}
+Object.assign(ACT, {
+  tiver: t => {
+    const r = S.ti.find(x => x.id === t.dataset.id); if (!r) return;
+    if (!r.seen) { r.seen = Date.now(); r.seenBy = dn(cur()); save(); render(); }
+    const L = (l, ts) => `<div class="small">${l}: ${ts ? fmt(ts) : '—'}</div>`;
+    openModal(`<div class="modal"><div class="modal-h"><h2 style="margin:0">Solicitud de TI</h2>${stP('ti', r.state)}</div><div class="modal-b stack"><div><b>${esc(unm(r))}</b><div class="small">${esc(r.dept) || 'Sin departamento'}</div></div><div class="grid2"><div><div class="small">Categoría</div>${esc(r.cat)}</div><div><div class="small">Urgencia</div>${esc(r.urg)}</div></div><div><div class="small">Descripción</div><div style="white-space:pre-wrap">${esc(r.text)}</div></div><div>${L('Enviada', r.ts)}${L('Vista por TI', r.seen)}${L('En proceso', r.procTs)}${L('Terminada por TI', r.tiDone)}${L('Confirmada por el usuario', r.userDone)}</div></div><div class="modal-f"><button class="btn" data-act="close">Cerrar</button></div></div>`);
+  },
+  tiset: t => {
+    const r = S.ti.find(x => x.id === t.dataset.id); if (!r) return; const st = t.dataset.s, now = Date.now();
+    r.state = st; r.upd = now; if (!r.seen) { r.seen = now; r.seenBy = dn(cur()); }
+    if (st === 'proceso') r.procTs = now;
+    if (st === 'terminada') { r.tiDone = now; if (r.userDone) { r.state = 'cerrada'; r.closed = now; } }
+    save(); toast(r.state === 'cerrada' ? 'Cerrada: pasó al historial' : 'Estado actualizado'); render();
+  },
+  tiuser: t => askConfirm('¿Confirmas que TI resolvió tu solicitud?', () => {
+    const r = S.ti.find(x => x.id === t.dataset.id); if (!r) return; const now = Date.now(); r.userDone = now; r.upd = now;
+    if (r.tiDone) { r.state = 'cerrada'; r.closed = now; } save(); toast('Gracias, solicitud confirmada'); render();
+  }, 'Sí, está terminada'),
+  hclr: () => { ui.h = {}; render(); },
+  hcsv: () => {
+    const ids = new Set($$('#tb_hist tr[data-id]:not([hidden])').map(x => x.dataset.id)), rs = S.ti.filter(r => ids.has(r.id));
+    if (!rs.length) return toast('No hay filas para descargar');
+    const T = v => v ? new Date(v).toLocaleString('es') : '', cs = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const data = [['Fecha solicitud', 'Usuario', 'Cédula', 'Departamento', 'Categoría', 'Urgencia', 'Descripción', 'Estado', 'Vista por TI', 'En proceso', 'Terminada por TI', 'Confirmada por el usuario', 'Cerrada'], ...rs.map(r => { const u = S.users.find(x => x.id === r.uid) || {}; return [T(r.ts), unm(r), u.name || '', r.dept || '', r.cat, r.urg, r.text, r.state === 'aprobada' ? 'Aprobada' : 'Cerrada', T(r.seen), T(r.procTs), T(r.tiDone), T(r.userDone), T(r.closed)]; })];
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + data.map(x => x.map(cs).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' })); a.download = 'historial-ti-' + new Date().toISOString().slice(0, 10) + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+  }
+});
+Object.assign(CHG, { hfil: t => { ui.h = ui.h || {}; ui.h[t.dataset.k] = t.value; render(); } });
+
+/* Planilla F03-M05 · Solicitud de pedido */
+function plHtml(r, ro) {
+  const p = r.pedido || {}, it = p.items || [], d = ro ? 'disabled' : '';
+  const t = (n, val, x = '') => `<input name="${n}" value="${esc(val || '')}" ${d} ${x}>`;
+  const today = new Date().toISOString().slice(0, 10);
+  const g = ['10. Fecha de Recepción', '11. Recibido Por', 'N° Correlativo'].map(l => `<label>${l}<input disabled></label>`).join('');
+  return `<div class="pl"><div class="pl-h"><img src="${ICON}" alt="" style="height:34px"><b>SOLICITUD DE PEDIDO</b><span>F03-M05</span></div>
+  <div class="r2"><label>1. Fecha de la solicitud<input type="date" name="fecha" value="${esc(p.fecha || today)}" ${d}></label><div class="chk"><b style="font-size:12px">2. Tipo de pedido:</b><label><input type="checkbox" name="tc" ${p.tipo === 'compra' ? 'checked' : ''} ${d}>Compra</label><label><input type="checkbox" name="ts" ${p.tipo === 'servicio' ? 'checked' : ''} ${d}>Servicio</label></div></div>
+  <div class="r2"><label>3. Unidad solicitante${t('unidad', p.unidad ?? r.dept)}</label><label>4. Centro de costos${t('centro', p.centro)}</label></div>
+  <div class="sec">DATOS DEL REQUERIMIENTO</div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Ítem</th><th>5. Descripción del requerimiento</th><th>6. Cantidad</th><th>7. Unidad de Medida</th></tr></thead><tbody>${Array.from({ length: 10 }, (_, i) => `<tr><td class="n">${i + 1}</td><td>${t('d' + (i + 1), (it[i] || {}).desc)}</td><td style="width:90px">${t('c' + (i + 1), (it[i] || {}).cant)}</td><td style="width:130px">${t('u' + (i + 1), (it[i] || {}).um)}</td></tr>`).join('')}</tbody></table></div>
+  <label>8. Observaciones a la Solicitud<textarea name="obs" rows="2" ${d}>${esc(p.obs || '')}</textarea></label>
+  <div class="sec" style="text-align:left">9. Validación del Solicitante: Responsable de la Unidad Solicitante</div>
+  <div class="r2"><label>Nombre y Apellido${t('nombre', p.nombre)}</label><label>Cargo${t('cargo', p.cargo)}</label></div><div class="firma">Firma</div>
+  <div class="ger"><div class="sec">PARA SER LLENADO POR LA GERENCIA DE ADMINISTRACIÓN Y FINANZAS</div><div class="r2">${g}</div><div class="r2"><label>13. Validado por: Nombre y Apellido<input disabled></label><label>Cargo<input disabled></label></div><div class="firma">Firma</div><div class="chk" style="flex-wrap:wrap"><b style="font-size:12px">14. Instrucciones:</b>${['Procesar', 'Mantener en espera', 'Devolver al solicitante', 'No procesar'].map(x => `<label><input type="checkbox" disabled>${x}</label>`).join('')}</div><label>15. Otras indicaciones<textarea rows="2" disabled></textarea></label><div class="r2"><label>RECIBIDO<input disabled></label><label>FECHA<input disabled></label></div></div></div>`;
+}
+const plSet = (f, d) => {
+  const s = (n, v) => { if (v != null && v !== '' && f[n]) f[n].value = v; };
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d.fecha || '')) f.fecha.value = d.fecha;
+  if (d.tipo === 'compra') f.tc.checked = true; if (d.tipo === 'servicio') f.ts.checked = true;
+  s('unidad', d.unidad); s('centro', d.centro); s('obs', d.obs); s('nombre', d.nombre); s('cargo', d.cargo);
+  (d.items || []).slice(0, 10).forEach((x, i) => { s('d' + (i + 1), x.desc); s('c' + (i + 1), x.cant); s('u' + (i + 1), x.um); });
+};
+async function plAI(body) {
+  const st = $('#plst'); st.textContent = 'Interpretando…';
+  try {
+    const { data, error } = await SB.functions.invoke('planilla-ia', { body });
+    if (error || !data || data.error) { let m = data && data.error; try { if (!m && error && error.context) m = (await error.context.json()).error; } catch (e) {} throw new Error(m || (error && error.message) || 'Sin respuesta'); }
+    plSet($('#plform'), data.data); st.textContent = 'Listo: revisa los campos y corrige lo que haga falta antes de guardar.';
+  } catch (e) { st.textContent = 'No se pudo interpretar: ' + e.message; }
+}
+let REC = null;
+Object.assign(ACT, {
+  sres: t => askConfirm('¿Marcar como reparable? Pasará al historial de resueltas y el usuario la verá como terminada.', () => { const r = S.mant.find(x => x.id === t.dataset.id); if (!r) return; r.state = 'terminada'; r.upd = Date.now(); r.by = dn(cur()); save(); toast('Solicitud terminada'); render(); }, 'Marcar reparable'),
+  sped: t => {
+    const r = S.mant.find(x => x.id === t.dataset.id) || (PNEW && PNEW.id === t.dataset.id ? PNEW : null); if (!r) return; const ro = !!t.dataset.ro;
+    openModal(`<div class="modal wide"><div class="modal-h"><h2 style="margin:0">Solicitud de pedido</h2></div><div class="modal-b"><div class="muted" style="margin-bottom:10px">${esc(r.place)} · ${esc(unm(r))}: ${esc(r.text)}</div>${ro ? '' : `<div class="pl-ia"><b>Llenar la planilla</b><div class="row" style="flex-wrap:wrap"><button type="button" class="btn sm" data-act="plmode" data-m="hand">A) A mano</button><button type="button" class="btn sm" data-act="plmode" data-m="foto">B) Con foto</button><button type="button" class="btn sm" data-act="plmode" data-m="voz">C) Nota de voz</button></div><div id="plmode" class="muted">Haz clic en cada casilla y escribe.</div><div id="plst" class="muted"></div></div>`}<form id="plform" data-form="ped" data-id="${r.id}">${plHtml(r, ro)}</form></div><div class="modal-f"><button class="btn" data-act="close">${ro ? 'Cerrar' : 'Cancelar'}</button>${ro ? '' : '<button class="btn primary" data-act="plsave">Guardar solicitud de pedido</button>'}</div></div>`);
+  },
+  plmode: t => {
+    const m = t.dataset.m, b = $('#plmode'); $('#plst').textContent = '';
+    b.innerHTML = m === 'foto' ? '<input type="file" accept="image/*" capture="environment" data-chg="plfoto"><div class="small">Toma o sube una foto nítida de la planilla llena a mano.</div>'
+      : m === 'voz' ? '<div class="row"><button type="button" class="btn sm primary" data-act="plrec">Grabar</button><button type="button" class="btn sm" data-act="plia">Interpretar</button></div><textarea id="pltext" rows="3" placeholder="Ej: Compra, unidad solicitante mantenimiento, centro de costos 120. Ítem uno: 4 válvulas de 1 pulgada…"></textarea>' : 'Haz clic en cada casilla y escribe.';
+  },
+  plrec: t => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition, st = $('#plst');
+    if (REC) { REC.stop(); return; }
+    if (!SR) { st.textContent = 'Este navegador no permite dictado: escribe el texto o usa el micrófono del teclado.'; return; }
+    REC = new SR(); REC.lang = 'es-VE'; REC.continuous = true; REC.interimResults = false; const ta = $('#pltext');
+    REC.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) ta.value += (ta.value ? ' ' : '') + e.results[i][0].transcript.trim(); };
+    REC.onend = () => { REC = null; t.textContent = 'Grabar'; st.textContent = 'Grabación detenida: revisa el texto y pulsa Interpretar.'; };
+    REC.start(); t.textContent = 'Detener'; st.textContent = 'Escuchando…';
+  },
+  plia: () => { const v = ($('#pltext') || {}).value; if (!v || !v.trim()) return toast('Dicta o escribe primero'); plAI({ text: v.trim() }); },
+  plsave: () => submitForm($('#plform'))
+});
+CHG.plfoto = t => {
+  const fl = t.files[0]; if (!fl) return; const im = new Image(), url = URL.createObjectURL(fl);
+  im.onload = () => { const k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url); plAI({ image: c.toDataURL('image/jpeg', .85).split(',')[1], media_type: 'image/jpeg' }); };
+  im.onerror = () => { $('#plst').textContent = 'No se pudo leer la imagen.'; }; im.src = url;
+};
+FORM.ped = f => {
+  let r = S.mant.find(x => x.id === f.dataset.id); const isNew = !r && PNEW && PNEW.id === f.dataset.id; if (isNew) r = PNEW; if (!r) return; const v = n => (f[n].value || '').trim();
+  const items = Array.from({ length: 10 }, (_, i) => ({ desc: v('d' + (i + 1)), cant: v('c' + (i + 1)), um: v('u' + (i + 1)) })).filter(x => x.desc || x.cant || x.um);
+  if (!items.length) return toast('Agrega al menos un ítem al requerimiento');
+  if (!f.tc.checked && !f.ts.checked) return toast('Marca el tipo de pedido: Compra o Servicio');
+  r.pedido = { fecha: v('fecha'), tipo: f.tc.checked && f.ts.checked ? 'compra' : f.tc.checked ? 'compra' : 'servicio', unidad: v('unidad'), centro: v('centro'), items, obs: v('obs'), nombre: v('nombre'), cargo: v('cargo'), by: dn(cur()), ts: Date.now() };
+  if (isNew) { S.mant.push(r); PNEW = null; } r.state = 'pedido'; r.upd = Date.now(); save(); closeModal(); toast('Solicitud de pedido guardada'); render();
+};
+
 /* ============ Notificaciones de escritorio ============ */
 let NSEEN = null, unreadN = 0;
 function nItems() {
@@ -1092,10 +1291,14 @@ function nItems() {
   S.mails.filter(m => (m.to || []).includes(u.id)).forEach(m => o.push(['mail|' + m.id, 'Nuevo correo', m.subject || '']));
   if (u.role === 'user') {
     S.docs.filter(d => canAccess(d, u)).forEach(d => o.push(['doc|' + d.id, 'Nuevo documento disponible', d.title]));
-    S.mant.filter(r => r.uid === u.id && r.state === 'atencion').forEach(r => o.push(['ma|' + r.id, 'Tu solicitud de mantenimiento fue aceptada', r.place]));
+    S.mant.filter(r => r.uid === u.id && (r.state === 'terminada' || r.state === 'pedido')).forEach(r => o.push(['ma|' + r.id + r.state, r.state === 'terminada' ? 'Tu solicitud de mantenimiento fue resuelta' : 'Tu solicitud pasó a solicitud de pedido', r.place]));
   }
+  if (u.role === 'user') S.ti.filter(r => r.uid === u.id).forEach(r => { if (r.seen) o.push(['tv|' + r.id, 'TI vio tu solicitud', r.cat]); if (r.state === 'proceso') o.push(['tp|' + r.id, 'TI está atendiendo tu solicitud', r.cat]); if (r.tiDone && !r.userDone) o.push(['tt|' + r.id, 'TI terminó tu solicitud: confírmala', r.cat]); if (r.state === 'incompleta') o.push(['ti|' + r.id + 'i', 'Tu solicitud de TI quedó pendiente', r.cat]); });
+  if (u.role === 'gerente_mant') S.mant.filter(r => r.state === 'gerente').forEach(r => o.push(['mg|' + r.id, 'Nueva solicitud de pedido de ' + unm(r), r.place]));
+  if (SUP[u.role]) S.mant.filter(r => r.state === 'contaduria' && (r.uid === u.id || (r.area || 'infra') === (u.role === 'sup_auto' ? 'auto' : 'infra'))).forEach(r => o.push(['mc|' + r.id, 'Solicitud de pedido aceptada: por pasar a contaduría', r.place]));
   if (u.role === 'admin') S.msgs.forEach(m => o.push(['msg|' + m.id, 'Nuevo mensaje de ' + m.uname, m.subject || '']));
-  if (u.role === 'admin_ti') S.ti.forEach(r => o.push(['ti|' + r.id, 'Nueva solicitud TI de ' + r.uname, r.cat + (r.dept ? ' · ' + r.dept : '')]));
+  if (u.role === 'admin_ti') S.ti.filter(r => r.state === 'pendiente').forEach(r => o.push(['ti|' + r.id, 'Nueva solicitud TI de ' + r.uname, r.cat + (r.dept ? ' · ' + r.dept : '')]));
+  if (u.role === 'sup_infra') S.mant.filter(r => r.state === 'enviada' && !r.rrole && (r.area || 'infra') === 'infra').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
   if (u.role === 'admin_mant') S.mant.filter(r => r.state === 'enviada').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
   return o;
 }
@@ -1104,7 +1307,7 @@ function notifyScan() {
   if (NSEEN === null) { NSEEN = new Set(items.map(i => i[0])); return; }
   const fresh = items.filter(i => !NSEEN.has(i[0])); fresh.forEach(i => NSEEN.add(i[0]));
   if (!fresh.length) return;
-  const send = (t, b) => { try { if ('Notification' in window && Notification.permission === 'granted') { const n = new Notification(t, { body: b, icon: ICON, tag: 'gw' + Math.random() }); n.onclick = () => { window.focus(); n.close(); }; } } catch (e) {} toast(t); };
+  const send = (t, b) => { try { if ('Notification' in window && Notification.permission === 'granted') { const o = { body: b, icon: ICON, tag: 'gw' + Math.random() }; if (SWREG) SWREG.showNotification(t, o); else { const n = new Notification(t, o); n.onclick = () => { window.focus(); n.close(); }; } } } catch (e) {} toast(t); };
   if (fresh.length > 3) send('GilApp', 'Tienes ' + fresh.length + ' notificaciones nuevas'); else fresh.forEach(i => send(i[1], i[2]));
   if (document.hidden) { unreadN += fresh.length; document.title = '(' + unreadN + ') GilApp'; }
 }
@@ -1123,16 +1326,23 @@ Object.assign(ACT, {
   enotif: () => { Notification.requestPermission().then(p => { nbar(); toast(p === 'granted' ? 'Notificaciones activadas' : 'El navegador bloqueó las notificaciones'); }); },
   nno: () => { ui.nno = true; nbar(); }
 });
-const _lo = ACT.logout; ACT.logout = t => { NSEEN = null; unreadN = 0; document.title = 'GilApp'; _lo(t); };
-/* Revisión automática cada 30 s (no interrumpe formularios abiertos) */
-setInterval(async () => {
+const _lo = ACT.logout; ACT.logout = t => { NSEEN = null; unreadN = 0; document.title = 'GilApp'; try { SB.removeAllChannels(); } catch (e) {} RT = false; _lo(t); };
+/* Actualización en tiempo real (Supabase Realtime) + respaldo cada 60 s */
+let SWREG = null, RT = false, rtT;
+if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').then(r => { SWREG = r; }).catch(() => {});
+async function liveRefresh() {
   const u = ui.user && cur();
-  if (!u || $('#modal').innerHTML || (u.role === 'admin' && ui.view === 'subir')) return;
+  if (!u || (u.role === 'admin' && ui.view === 'subir')) return;
   const typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
   try { await chain; await loadAll(); notifyScan(); } catch (e) { return; }
   const live = u.role === 'admin' ? ['resumen', 'msgs', 'docs'].includes(ui.view) : u.role === 'user' ? (ui.uview.startsWith('folder') || ['desk', 'lib', 'ti', 'mant', 'mail'].includes(ui.uview)) : ui.view !== 'cuenta';
-  if (!typing && live) render();
-}, 30000);
+  if (!typing && live && !$('#modal').innerHTML) render();
+}
+function rtStart() {
+  if (RT) return; RT = true;
+  SB.channel('gw-live').on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, () => { clearTimeout(rtT); rtT = setTimeout(liveRefresh, 600); }).subscribe();
+}
+setInterval(liveRefresh, 60000);
 
 document.addEventListener('click', e => { const t = e.target.closest('[data-act]'); if (t && ACT[t.dataset.act]) ACT[t.dataset.act](t, e); });
 document.addEventListener('change', e => { const t = e.target.closest('[data-chg]'); if (t && CHG[t.dataset.chg]) CHG[t.dataset.chg](t, e); });
