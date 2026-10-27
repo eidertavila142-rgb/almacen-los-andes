@@ -290,9 +290,9 @@ let idleT; const IDLE_MS = 15 * 60 * 1000;
 const idleReset = () => { clearTimeout(idleT); idleT = setTimeout(() => { if (ui.user) { ACT.logout(); toast('Sesión cerrada por inactividad'); } }, IDLE_MS); };
 ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev => document.addEventListener(ev, idleReset, { passive: true })); idleReset();
 const EMAIL = n => 'almacen.' + String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') + '@gmail.com';
-let S = { users: [], depts: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], lockdown: false };
+let S = { users: [], depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], lockdown: false };
 let SNAP = {};
-const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })) };
+const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
 function snapNow() {
   const m = {};
   for (const c in COLL) for (const x of COLL[c]()) m[c + '|' + x.id] = JSON.stringify(x);
@@ -327,8 +327,9 @@ function save() {
 async function loadAll() {
   const [p, it] = await Promise.all([SB.from('profiles').select('*'), SB.from('items').select('coll,id,data').limit(5000)]);
   if (p.error || it.error) throw (p.error || it.error);
-  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '' })), depts: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], lockdown: false };
-  for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (S[r.coll]) S[r.coll].push(r.data); }
+  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], lockdown: false };
+  const UC = {}; for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'cargos') S.cargos.push(r.data.n); else if (r.coll === 'ucargo') UC[r.id] = r.data.cargo; else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (S[r.coll]) S[r.coll].push(r.data); }
+  S.users.forEach(u => { u.cargo = UC[u.id] || ''; });
   SNAP = snapNow();
 }
 async function enter() {
@@ -482,8 +483,8 @@ function viewAuth() {
 /* ============ Panel del administrador ============ */
 function viewAdmin() {
   const unread = S.msgs.filter(m => !m.read).length;
-  const nav = [['resumen','Resumen'],['docs','Documentos'],['subir','Subir documento'],['users','Usuarios'],['newu','Crear usuario'],['mail','Enviar correo'],['depts','Departamentos'],['trash','Papelera'],['archive','Archivo'],['log','Historial'],['msgs','Mensajes'],['cuenta','Mi cuenta']];
-  const V = { resumen: vResumen, docs: vDocs, subir: vSubir, users: vUsers, newu: vNewU, mail: vMail, depts: vDepts, trash: vTrash, archive: vArchive, log: vLog, msgs: vMsgs, cuenta: vCuenta };
+  const nav = [['resumen','Resumen'],['docs','Documentos'],['subir','Subir documento'],['users','Usuarios'],['newu','Crear usuario'],['mail','Enviar correo'],['depts','Departamentos'],['cargos','Cargos'],['trash','Papelera'],['archive','Archivo'],['log','Historial'],['msgs','Mensajes'],['cuenta','Mi cuenta']];
+  const V = { resumen: vResumen, docs: vDocs, subir: vSubir, users: vUsers, newu: vNewU, mail: vMail, depts: vDepts, cargos: vCargos, trash: vTrash, archive: vArchive, log: vLog, msgs: vMsgs, cuenta: vCuenta };
   return `<div class="shell"><aside>
     <div class="brand">${I.logo} <span>GilApp</span></div>
     <nav>${nav.map(([k, l]) => `<button data-act="nav" data-v="${k}" class="${ui.view === k ? 'on' : ''}">${l}${k === 'msgs' && unread ? `<span class="badge">${unread}</span>` : ''}</button>`).join('')}</nav>
@@ -613,9 +614,10 @@ async function submitUpload() {
 function vUsers() {
   const counts = id => ({ o: S.logs.filter(l => l.uid === id && l.type === 'open').length, d: S.logs.filter(l => l.uid === id && l.type === 'download').length });
   return `<div class="between"><div><h1>Usuarios</h1><p class="sub">Credenciales visibles solo para el administrador.</p></div><button class="btn primary" data-act="newuser">Nuevo usuario</button></div>
-  <div class="tw"><table><thead><tr><th>Usuario</th><th>Contraseña</th><th>Departamento</th><th>Rol</th><th>Descarga</th><th>Aperturas / descargas</th><th></th></tr></thead><tbody>
-  ${S.users.map(u => { const c = counts(u.id); return `<tr>
-    <td><b>${esc(dn(u))}</b><div class="small">C.I. ${esc(u.name)}</div></td><td class="mono">${esc(u.pass)}</td><td>${esc(u.dept) || '<span class="muted">Sin asignar</span>'}</td>
+  <div class="row" style="flex-wrap:wrap;margin:0 0 12px"><select data-chg="ucargo" style="width:auto;min-width:200px"><option value="">Todos los cargos</option>${S.cargos.map(c => `<option ${ui.ucargo === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__none" ${ui.ucargo === '__none' ? 'selected' : ''}>Sin cargo</option></select></div>
+  <div class="tw"><table><thead><tr><th>Usuario</th><th>Contraseña</th><th>Departamento</th><th>Cargo</th><th>Rol</th><th>Descarga</th><th>Aperturas / descargas</th><th></th></tr></thead><tbody>
+  ${S.users.filter(u => !ui.ucargo || (ui.ucargo === '__none' ? !u.cargo : u.cargo === ui.ucargo)).map(u => { const c = counts(u.id); return `<tr>
+    <td><b>${esc(dn(u))}</b><div class="small">C.I. ${esc(u.name)}</div></td><td class="mono">${esc(u.pass)}</td><td>${esc(u.dept) || '<span class="muted">Sin asignar</span>'}</td><td>${esc(u.cargo) || '<span class="muted">Sin cargo</span>'}</td>
     <td><span class="pill ${u.role === 'user' ? 'gray' : ''}">${RL[u.role] || 'Usuario'}</span></td>
     <td>${u.role !== 'user' ? '<span class="pill gray">—</span>' : `<span class="pill ${userDl(u) ? 'ok' : 'danger'}">${userDl(u) ? 'Activada' : 'Desactivada'}</span>`}</td>
     <td>${c.o} / ${c.d}</td>
@@ -633,6 +635,7 @@ function userForm(u) {
     <div class="modal-b stack">
       <label>Nombre y apellido<input name="full" value="${esc(u.full || '')}" required></label><label>Cédula (para iniciar sesión)<input name="name" value="${esc(u.name || '')}" required></label>
       <label>Contraseña<input name="pass" ${(u && u.id) ? 'disabled placeholder="Solo la cambia el propio usuario"' : 'required minlength="6"'}></label>
+      <label>Cargo<select name="cargo"><option value="">Sin cargo</option>${S.cargos.map(c => `<option ${u.cargo === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
       <div class="grid2">
         <label>Departamento<select name="dept"><option value="" ${!u.dept ? 'selected' : ''}>Sin asignar</option>${S.depts.map(d => `<option ${u.dept === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></label>
         <label>Rol<select name="role"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin Biblioteca</option><option value="admin_ti" ${u.role === 'admin_ti' ? 'selected' : ''}>Admin TI</option><option value="sup_auto" ${u.role === 'sup_auto' ? 'selected' : ''}>Supervisor de Automotriz</option><option value="sup_infra" ${u.role === 'sup_infra' ? 'selected' : ''}>Supervisor de Infraestructura</option><option value="gerente_mant" ${u.role === 'gerente_mant' ? 'selected' : ''}>Gerente de Mantenimiento</option></select></label>
@@ -650,6 +653,7 @@ function vNewU() {
     <label>Nombre y apellido<input name="full" required placeholder="Ej.: María Pérez"></label><label>Cédula (para iniciar sesión)<input name="name" required inputmode="numeric" pattern="[0-9]+" placeholder="Ej.: 12345678"></label>
     <label>Contraseña<input name="pass" required minlength="8"></label>
     <label>Departamento<select name="dept"><option value="">Sin asignar</option>${S.depts.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
+    <label>Cargo<select name="cargo"><option value="">Sin cargo</option>${S.cargos.map(c => `<option>${esc(c)}</option>`).join('')}</select></label>
     <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Admin Biblioteca</option><option value="admin_ti">Admin TI</option><option value="sup_auto">Supervisor de Automotriz</option><option value="sup_infra">Supervisor de Infraestructura</option><option value="gerente_mant">Gerente de Mantenimiento</option></select></label>
     <div class="err" id="uerr" hidden></div><div><button class="btn primary">Crear usuario</button></div></form>
   <div class="panel"><h3 style="margin-top:0">Reglas para crear un usuario</h3><ul style="padding-left:18px;line-height:1.7">
@@ -691,6 +695,16 @@ function vDepts() {
   ${S.depts.map(d => { const n = S.users.filter(u => u.dept === d).length; return `<tr><td><b>${esc(d)}</b></td><td>${n}</td>
     <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-act="renamedept" data-n="${esc(d)}">Renombrar</button>
     <button class="btn sm danger" data-act="deldept" data-n="${esc(d)}" ${n ? 'disabled title="Tiene usuarios asignados"' : ''}>Eliminar</button></td></tr>`; }).join('')}</tbody></table></div>`;
+}
+
+/* ---- Cargos (etiqueta del puesto; por ahora no otorga funciones ni permisos) ---- */
+function vCargos() {
+  return `<h1>Cargos</h1><p class="sub">Crea los cargos y asígnalos al crear o editar un usuario. Por ahora un cargo es solo una etiqueta: no da funciones ni permisos.</p>
+  <form data-form="cargo" class="row" style="margin-bottom:14px;max-width:420px"><input name="n" placeholder="Nuevo cargo" required><button class="btn primary">Crear cargo</button></form>
+  <div class="tw"><table><thead><tr><th>Cargo</th><th>Usuarios</th><th></th></tr></thead><tbody>
+  ${S.cargos.map(c => { const n = S.users.filter(u => u.cargo === c).length; return `<tr><td><b>${esc(c)}</b></td><td>${n}</td>
+    <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-act="rencargo" data-n="${esc(c)}">Renombrar</button>
+    <button class="btn sm danger" data-act="delcargo" data-n="${esc(c)}" ${n ? 'disabled title="Tiene usuarios asignados"' : ''}>Eliminar</button></td></tr>`; }).join('') || '<tr><td colspan="3"><div class="empty">Aún no hay cargos. Crea el primero arriba.</div></td></tr>'}</tbody></table></div>`;
 }
 
 /* ---- Papelera y archivo ---- */
@@ -957,6 +971,11 @@ const ACT = {
     const old = t.dataset.n;
     openModal(`<div class="modal" style="max-width:420px"><form data-form="rendept" data-old="${esc(old)}"><div class="modal-b"><label>Nuevo nombre<input name="n" value="${esc(old)}" required></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar</button></div></form></div>`);
   },
+  rencargo: t => {
+    const old = t.dataset.n;
+    openModal(`<div class="modal" style="max-width:420px"><form data-form="rencargo" data-old="${esc(old)}"><div class="modal-b"><label>Nuevo nombre<input name="n" value="${esc(old)}" required></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar</button></div></form></div>`);
+  },
+  delcargo: t => askConfirm('¿Eliminar este cargo?', () => { S.cargos = S.cargos.filter(x => x !== t.dataset.n); save(); render(); }, 'Eliminar'),
   deldept: t => askConfirm('¿Eliminar este departamento?', () => { S.depts = S.depts.filter(x => x !== t.dataset.n); S.docs.forEach(d => d.depts = d.depts.filter(x => x !== t.dataset.n)); save(); render(); }, 'Eliminar'),
   readmsg: t => { S.msgs.find(m => m.id === t.dataset.id).read = true; save(); render(); },
   delmsg: t => { S.msgs = S.msgs.filter(m => m.id !== t.dataset.id); save(); render(); },
@@ -1025,12 +1044,12 @@ const FORM = {
     if (id) {
       const u = S.users.find(x => x.id === id);
       if (u.role === 'admin' && f.role.value !== 'admin' && S.users.filter(x => x.role === 'admin').length === 1) return bad('Debe existir al menos un administrador');
-      Object.assign(u, { name: n, full: fl, dept: f.dept.value, role: f.role.value });
+      Object.assign(u, { name: n, full: fl, dept: f.dept.value, role: f.role.value, cargo: f.cargo.value });
     } else {
       if (f.pass.value.length < 8) return bad('La contraseña debe tener al menos 8 caracteres');
       const { data: nid, error } = await SB.rpc('admin_create_user', { p_name: n, p_pass: f.pass.value, p_dept: f.dept.value, p_role: f.role.value, p_full: fl });
       if (error || !nid) return bad(/duplicate|already/i.test(error?.message || '') ? 'Ese usuario ya existe' : (error?.message || 'No se pudo crear el usuario'));
-      S.users.push({ id: nid, name: n, full: fl, dept: f.dept.value, role: f.role.value, download: true });
+      S.users.push({ id: nid, name: n, full: fl, dept: f.dept.value, role: f.role.value, download: true, cargo: f.cargo.value });
     }
     save(); closeModal(); if (!id) toast('Usuario creado'); render();
   },
@@ -1052,6 +1071,13 @@ const FORM = {
     const old = f.dataset.old, n = f.n.value.trim();
     if (!n || (n !== old && S.depts.some(d => d.toLowerCase() === n.toLowerCase()))) return toast('Nombre vacío o repetido');
     S.depts = S.depts.map(d => d === old ? n : d); S.users.forEach(u => { if (u.dept === old) u.dept = n; }); S.docs.forEach(d => d.depts = d.depts.map(x => x === old ? n : x));
+    save(); closeModal(); render();
+  },
+  cargo: f => { const n = f.n.value.trim(); if (!n || S.cargos.some(c => c.toLowerCase() === n.toLowerCase())) return toast('Nombre vacío o repetido'); S.cargos.push(n); save(); toast('Cargo creado'); render(); },
+  rencargo: f => {
+    const old = f.dataset.old, n = f.n.value.trim();
+    if (!n || (n !== old && S.cargos.some(c => c.toLowerCase() === n.toLowerCase()))) return toast('Nombre vacío o repetido');
+    S.cargos = S.cargos.map(c => c === old ? n : c); S.users.forEach(u => { if (u.cargo === old) u.cargo = n; });
     save(); closeModal(); render();
   },
   mail: f => { const to = $$('.m_to:checked').map(c => c.value); if (!to.length) return toast('Elige al menos un destinatario'); S.mails.push({ id: uid(), to, subject: f.subject.value.trim(), text: f.text.value.trim(), ts: Date.now() }); save(); toast('Correo enviado'); render(); },
@@ -1431,6 +1457,7 @@ Object.assign(ACT, {
   },
   stxls: stXls
 });
+Object.assign(CHG, { ucargo: t => { ui.ucargo = t.value; render(); } });
 Object.assign(CHG, { stf: t => { stS()[t.dataset.k] = t.value; ST_ANIM = true; render(); } });
 
 /* Planilla F03-M05 · Solicitud de pedido */
