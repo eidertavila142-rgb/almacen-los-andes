@@ -29,6 +29,9 @@
 }
 *{box-sizing:border-box}
 html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+html{max-width:100%;overflow-x:hidden}
+body,#app{max-width:100%;overflow-x:clip}
+html:has(#app.gw),body:has(#app.gw){background:#141920}
 body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
 h1{font-size:20px;margin:0 0 4px;font-weight:600;letter-spacing:-.01em}
 h2{font-size:15px;margin:0 0 12px;font-weight:600}
@@ -157,7 +160,9 @@ main{padding:28px 32px;max-width:1100px;width:100%}
 #toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:13px;z-index:99;display:none;max-width:90vw}
 [hidden]{display:none!important}
 @media (max-width:820px){
-  .shell{grid-template-columns:1fr}
+  .shell{grid-template-columns:minmax(0,1fr)}
+  main{min-width:0;max-width:100%}
+  .gw aside,.gw .top{max-width:calc(100% - 28px)}
   aside{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}
   aside nav{flex-direction:row;overflow-x:auto;padding-bottom:6px}
   aside nav button{white-space:nowrap}
@@ -309,7 +314,10 @@ function save() {
   chain = chain.then(async () => {
     const chk = r => { if (r.error) throw r.error; };
     if (ins.length) chk(await SB.from('items').insert(ins));
-    if (ups.length) chk(await SB.from('items').upsert(ups));
+    for (const x of ups) {
+      const r = await SB.from('items').update({ data: x.data }).eq('coll', x.coll).eq('id', x.id).select('id'); chk(r);
+      if (!r.data || !r.data.length) chk(await SB.from('items').insert(x));
+    }
     for (const u of pu) chk(await SB.from('profiles').update(u.v).eq('id', u.id));
     for (const d of dels) chk(await SB.from('items').delete().eq('coll', d.c).eq('id', d.id));
     for (const d of pd) chk(await SB.from('profiles').delete().eq('id', d.id));
@@ -448,7 +456,7 @@ function render() {
   app.className = u.role === 'admin' ? '' : 'gw';
   app.innerHTML = u.role === 'admin' ? viewAdmin() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser();
   if (u.role === 'admin' && ui.view === 'subir') initUpload();
-  if (u.role === 'admin_ti' && ui.view === 'stats') tiStatsDraw();
+  if ((u.role === 'admin_ti' || SUP[u.role]) && ui.view === 'stats') tiStatsDraw();
 }
 
 /* ============ Autenticación ============ */
@@ -1130,8 +1138,12 @@ function supTable(rs, mode) {
 function pcard(r, mode) {
   const p = r.pedido || {}, its = p.items || [];
   const acts = mode === 'ger' ? (r.state === 'gerente' ? `<button class="btn sm primary" data-act="gacept" data-id="${r.id}">Aceptar</button>` : '') : r.state === 'pedido' ? `<button class="btn sm" data-act="sped" data-id="${r.id}">Editar planilla</button> <button class="btn sm primary" data-act="sger" data-id="${r.id}">Enviar al gerente de mantenimiento</button>` : '';
-  return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.rrole ? SUP[r.rrole] : 'Usuario'}</div></div>${stP('mant', r.state)}</div><div class="muted" style="font-size:13px">${p.tipo === 'servicio' ? 'Servicio' : 'Compra'} · ${esc(p.unidad || '—')} · Centro de costos: ${esc(p.centro || '—')} · ${fmt(p.ts || r.ts)}</div><div style="font-size:13px">${its.slice(0, 4).map(x => '• ' + esc(x.desc) + ' — ' + esc(x.cant) + ' ' + esc(x.um)).join('<br>')}${its.length > 4 ? '<br>+' + (its.length - 4) + ' más' : ''}</div><div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button>${acts}</div></div>`;
+  return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.rrole ? SUP[r.rrole] : 'Usuario'}</div></div>${stP('mant', r.state)}</div>${r.text ? `<div style="font-size:13px;white-space:pre-wrap">${esc(r.text)}</div>` : ''}<div class="muted" style="font-size:13px">${p.tipo === 'servicio' ? 'Servicio' : 'Compra'} · ${esc(p.unidad || '—')} · Centro de costos: ${esc(p.centro || '—')} · ${fmt(p.ts || r.ts)}</div><div style="font-size:13px">${its.slice(0, 4).map(x => '• ' + esc(x.desc) + ' — ' + esc(x.cant) + ' ' + esc(x.um)).join('<br>')}${its.length > 4 ? '<br>+' + (its.length - 4) + ' más' : ''}</div><div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button>${acts}</div></div>`;
 }
+function rcard(r) {
+  return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.dept ? esc(r.dept) + ' · ' : ''}${r.rrole ? SUP[r.rrole] : (rolOf(r) || 'Usuario')}</div></div>${stP('mant', r.state)}</div><div style="font-size:13px;white-space:pre-wrap">${esc(r.text)}</div><div class="muted" style="font-size:13px">Enviada: ${fmt(r.ts)}${r.upd ? ' · Resuelta: ' + fmt(r.upd) : ''}</div>${r.pedido ? `<div class="row"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button></div>` : ''}</div>`;
+}
+const rgrid = (rs, empty) => rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(rcard).join('')}</div>` : `<div class="tw"><div class="empty">${empty}</div></div>`;
 const pgrid = (rs, mode, empty) => rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(r => pcard(r, mode)).join('')}</div>` : `<div class="tw"><div class="empty">${empty}</div></div>`;
 const isU = v => String(v).startsWith('u:');
 const ukey = () => (ui.uview || 'lib').startsWith('folder') ? 'lib' : (ui.uview || 'lib');
@@ -1154,13 +1166,13 @@ function viewSup() {
   const mine = S.mant.filter(r => r.uid === u.id).sort((a, b) => b.ts - a.ts);
   const withP = [...inbox.filter(r => r.pedido && r.state !== 'terminada'), ...mine.filter(r => r.pedido)].sort((a, b) => (b.upd || b.ts) - (a.upd || a.ts));
   const pend = withP.filter(r => r.state === 'pedido' || r.state === 'contaduria'), aprob = withP.filter(r => r.state === 'gerente');
-  const nav = [['recv', 'Solicitudes recibidas', open.length], ['pend', 'Solicitudes pendientes', pend.filter(r => r.state === 'pedido').length], ['aprob', 'Pendientes por aprobar', aprob.length], ['mine', 'Mis solicitudes', 0], ['cuenta', 'Mi cuenta', 0]];
-  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'aprob'
+  const nav = [['recv', 'Solicitudes recibidas', open.length], ['pend', 'Solicitudes pendientes', pend.filter(r => r.state === 'pedido').length], ['aprob', 'Pendientes por aprobar', aprob.length], ['mine', 'Mis solicitudes', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]];
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'stats' ? tiStats() : v === 'aprob'
     ? `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido que enviaste al gerente de mantenimiento y esperan su aprobación.</p>${pgrid(aprob, 'sup', 'No tienes solicitudes pendientes por aprobar.')}` : v === 'pend'
     ? `<div class="between"><div><h1>Solicitudes pendientes</h1><p class="sub">Planillas de pedido por enviar al gerente de mantenimiento. Las aceptadas quedan aquí como <b>Por pasar a contaduría</b>.</p></div><button class="btn primary" data-act="pnew">Nueva solicitud de pedido</button></div>${pgrid(pend, 'sup', 'No hay solicitudes pendientes.')}`
     : v === 'mine'
     ? `<h1>Mis solicitudes</h1><p class="sub">Crea tu propia solicitud. Quedará registrada como ${SUP[u.role]}.</p><form data-form="mant" class="panel stack" style="max-width:640px"><label>Lugar<select name="place">${places().map(g => `<optgroup label="${g[0]}">${g[1].map(x => `<option>${esc(x)}</option>`).join('')}</optgroup>`).join('')}</select></label><label>¿Qué ocurre?<textarea name="text" rows="3" required></textarea></label><div><button class="btn primary">Enviar solicitud</button></div></form><h2>Enviadas por mí</h2>${supTable(mine, 'mine')}`
-    : `<div class="between"><div><h1>Solicitudes recibidas</h1><p class="sub">Marca cada solicitud como <b>reparable</b> (pasa al historial como terminada) o como <b>requiere solicitud de pedido</b> (llenas la planilla F03-M05).${area === 'auto' ? ' Las solicitudes de automotriz se configuran en el siguiente paso.' : ''}</p></div><button class="btn" data-act="refresh">Actualizar</button></div><div class="stats"><div class="stat"><b>${open.length}</b><span>Por atender</span></div><div class="stat"><b>${pend.filter(r => r.state === 'pedido').length}</b><span>Pedidos por enviar</span></div><div class="stat"><b>${done.length}</b><span>Resueltas</span></div></div>${supTable(open, 'recv')}<h2>Historial de solicitudes resueltas</h2>${supTable(done, 'hist')}`;
+    : `<div class="between"><div><h1>Solicitudes recibidas</h1><p class="sub">Marca cada solicitud como <b>reparable</b> (pasa al historial como terminada) o como <b>requiere solicitud de pedido</b> (llenas la planilla F03-M05).${area === 'auto' ? ' Las solicitudes de automotriz se configuran en el siguiente paso.' : ''}</p></div><button class="btn" data-act="refresh">Actualizar</button></div><div class="stats"><div class="stat"><b>${open.length}</b><span>Por atender</span></div><div class="stat"><b>${pend.filter(r => r.state === 'pedido').length}</b><span>Pedidos por enviar</span></div><div class="stat"><b>${done.length}</b><span>Resueltas</span></div></div>${supTable(open, 'recv')}<h2>Historial de solicitudes resueltas</h2>${rgrid(done.sort((a, b) => (b.upd || b.ts) - (a.upd || a.ts)), 'Aún no hay solicitudes resueltas.')}`;
   return mShell('Mantenimiento', nav, v, body, u);
 }
 function viewGer() {
@@ -1232,22 +1244,53 @@ Object.assign(ACT, {
 });
 Object.assign(CHG, { hfil: t => { ui.h = ui.h || {}; ui.h[t.dataset.k] = t.value; render(); } });
 
-/* ============ Estadísticas TI ============ */
-const ST_AN = {
-  date: ['Solicitudes por fecha', ['line', 'area', 'bar']],
-  cat: ['Tipos de solicitud que más llegan', ['bar', 'hbar', 'pie', 'doughnut', 'polar']],
-  dept: ['Departamentos que más solicitan', ['bar', 'hbar', 'pie', 'doughnut', 'polar']],
-  depcat: ['Qué solicita cada departamento', ['stack', 'hstack', 'group']],
-  urg: ['Solicitudes por urgencia', ['bar', 'hbar', 'pie', 'doughnut', 'polar']],
-  user: ['Usuarios que más solicitan', ['hbar', 'bar', 'pie', 'doughnut']]
-};
+/* ============ Estadísticas (TI y Supervisores de mantenimiento) ============ */
 const ST_CT = { bar: 'Barras', hbar: 'Barras horizontales', line: 'Líneas', area: 'Área', pie: 'Torta', doughnut: 'Dona', polar: 'Polar', stack: 'Barras apiladas', hstack: 'Apiladas horizontales', group: 'Barras agrupadas' };
 const ST_COL = ['#c8241b', '#1f2937', '#f59e0b', '#2563eb', '#059669', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#9ca3af'];
-const ST_URG = { Baja: '#059669', Media: '#f59e0b', Alta: '#c8241b' };
-const ST_STL = { pendiente: 'En espera', proceso: 'En proceso', terminada: 'En pausa', incompleta: 'Incompleta', cerrada: 'Terminada', aprobada: 'Terminada' };
+const CT_SINGLE = ['bar', 'hbar', 'pie', 'doughnut', 'polar'], CT_DATE = ['line', 'area', 'bar'], CT_MAT = ['stack', 'hstack', 'group'];
+const ptype = p => /^Oficina de /.test(p || '') ? 'Oficinas' : /^Baño de /.test(p || '') ? 'Baños' : (p || 'Otro lugar');
+const mRes = r => r.state === 'enviada' ? 'Por atender' : r.state === 'terminada' ? 'Reparable' : ['pedido', 'gerente', 'contaduria'].includes(r.state) ? 'Requiere pedido' : 'Otro';
+const mStl = r => ((CFG.mant.st.find(x => x[0] === r.state) || [])[3]) || r.state;
+const tiStl = r => ({ pendiente: 'En espera', proceso: 'En proceso', terminada: 'En pausa', incompleta: 'Incompleta', cerrada: 'Terminada', aprobada: 'Terminada' })[r.state] || r.state;
+const stD = v => v ? new Date(v) : null;
+const MRES = ['Por atender', 'Reparable', 'Requiere pedido'];
+const ST_CFG = {
+  ti: {
+    name: 'solicitudes a TI', file: 'ti', def: 'cat', topLbl: 'Tipo que más llega', topFn: r => r.cat || 'Otro',
+    rows: () => S.ti,
+    flt: [['f1', 'Todos los tipos de solicitud', () => TI_CATS, r => r.cat], ['f2', 'Toda urgencia', () => URG, r => r.urg]],
+    an: {
+      date: { t: 'Solicitudes por fecha', kind: 'date', cts: CT_DATE },
+      cat: { t: 'Tipos de solicitud que más llegan', kind: 'count', fn: r => r.cat || 'Otro', first: 'Tipo de solicitud', cts: CT_SINGLE },
+      dept: { t: 'Departamentos que más solicitan', kind: 'count', fn: r => r.dept || 'Sin departamento', first: 'Departamento', cts: CT_SINGLE },
+      depcat: { t: 'Qué solicita cada departamento', kind: 'matrix', fn: r => r.cat || 'Otro', cts: CT_MAT },
+      urg: { t: 'Solicitudes por urgencia', kind: 'count', fn: r => r.urg, fixed: URG, first: 'Urgencia', colors: { Baja: '#059669', Media: '#f59e0b', Alta: '#c8241b' }, cts: CT_SINGLE },
+      user: { t: 'Usuarios que más solicitan', kind: 'count', fn: r => unm(r) || 'Sin nombre', limit: 15, first: 'Usuario', cts: ['hbar', 'bar', 'pie', 'doughnut'] }
+    },
+    cols: [['Fecha y hora', 18], ['Solicitante', 26], ['Usuario', 18], ['Departamento', 22], ['Tipo de solicitud', 28], ['Urgencia', 11], ['Descripción', 55], ['Estado', 13], ['Vista por TI', 18], ['En proceso', 18], ['Terminada por TI', 18], ['Terminada por el usuario', 18], ['Cerrada', 18]], dateCols: [1, 9, 10, 11, 12, 13], descCol: 7,
+    row: (r, u) => [stD(r.ts), unm(r), u.name || '', r.dept || '', r.cat, r.urg, r.text, tiStl(r), stD(r.seen), stD(r.procTs), stD(r.tiDone), stD(r.userDone), stD(r.closed)]
+  },
+  mant: {
+    name: 'solicitudes de mantenimiento', file: 'mantenimiento', def: 'place', topLbl: 'Lugar que más solicita', topFn: r => r.place || 'Otro lugar',
+    rows: () => { const u = cur(), area = u.role === 'sup_auto' ? 'auto' : 'infra'; return S.mant.filter(r => (r.area || 'infra') === area && r.uid !== u.id && !r.rrole); },
+    flt: [['f1', 'Todos los lugares', () => places().flatMap(g => g[1]), r => r.place], ['f2', 'Todos los resultados', () => MRES, mRes]],
+    an: {
+      date: { t: 'Solicitudes por fecha', kind: 'date', cts: CT_DATE },
+      place: { t: 'Lugares con más solicitudes', kind: 'count', fn: r => r.place || 'Otro lugar', limit: 15, first: 'Lugar', cts: CT_SINGLE },
+      ptype: { t: 'Tipos de lugar con más solicitudes', kind: 'count', fn: r => ptype(r.place), first: 'Tipo de lugar', cts: CT_SINGLE },
+      dept: { t: 'Departamentos que más solicitan', kind: 'count', fn: r => r.dept || 'Sin departamento', first: 'Departamento', cts: CT_SINGLE },
+      depcat: { t: 'Qué solicita cada departamento (por tipo de lugar)', kind: 'matrix', fn: r => ptype(r.place), cts: CT_MAT },
+      res: { t: 'Solicitudes por resultado', kind: 'count', fn: mRes, fixed: MRES, first: 'Resultado', colors: { 'Por atender': '#f59e0b', Reparable: '#059669', 'Requiere pedido': '#2563eb', Otro: '#9ca3af' }, cts: CT_SINGLE },
+      user: { t: 'Usuarios que más solicitan', kind: 'count', fn: r => unm(r) || 'Sin nombre', limit: 15, first: 'Usuario', cts: ['hbar', 'bar', 'pie', 'doughnut'] }
+    },
+    cols: [['Fecha y hora', 18], ['Solicitante', 26], ['Usuario', 18], ['Departamento', 22], ['Lugar', 26], ['Descripción', 55], ['Resultado', 17], ['Estado', 22], ['Última actualización', 18]], dateCols: [1, 9], descCol: 6,
+    row: (r, u) => [stD(r.ts), unm(r), u.name || '', r.dept || '', r.place, r.text, mRes(r), mStl(r), stD(r.upd)]
+  }
+};
+const stM = () => ST_CFG[cur().role === 'admin_ti' ? 'ti' : 'mant'];
 const CHART_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', XLS_URL = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
 let TICH = null, ST_ANIM = true; const LIBP = {};
-const stS = () => (ui.st = Object.assign({ an: 'cat', ct: 'bar', grp: 'day', from: '', to: '', dept: '', cat: '', urg: '' }, ui.st));
+const stS = () => (ui.st = Object.assign({ an: '', ct: 'bar', grp: 'day', from: '', to: '', dept: '', f1: '', f2: '' }, ui.st));
 const fIso = x => new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const fDMY = s => s ? s.split('-').reverse().join('/') : '';
 function loadLib(url, g) {
@@ -1264,38 +1307,38 @@ function stPeriods(rs, grp) {
   return out;
 }
 function stCompute() {
-  const s = stS(); if (!ST_AN[s.an][1].includes(s.ct)) s.ct = ST_AN[s.an][1][0];
+  const M = stM(), s = stS(); if (!M.an[s.an]) s.an = M.def; const sp = M.an[s.an]; if (!sp.cts.includes(s.ct)) s.ct = sp.cts[0];
   const f = s.from ? new Date(s.from + 'T00:00:00').getTime() : 0, t = s.to ? new Date(s.to + 'T23:59:59').getTime() : Infinity;
-  const rs = S.ti.filter(r => r.ts >= f && r.ts <= t && (!s.dept || r.dept === s.dept) && (!s.cat || r.cat === s.cat) && (!s.urg || r.urg === s.urg)).sort((a, b) => a.ts - b.ts);
+  const rs = M.rows().filter(r => r.ts >= f && r.ts <= t && (!s.dept || r.dept === s.dept) && M.flt.every(([k, , , fn]) => !s[k] || fn(r) === s[k])).sort((a, b) => a.ts - b.ts);
   const tally = fn => { const m = new Map(); rs.forEach(r => { const k = fn(r); m.set(k, (m.get(k) || 0) + 1); }); return m; };
   const top = m => [...m.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'es'));
-  const dk = r => r.dept || 'Sin departamento', ck = r => r.cat || 'Otro';
-  const byCat = top(tally(ck)), byDept = top(tally(dk)), total = rs.length;
-  const c = { s, rs, total, topCat: byCat[0], topDept: byDept[0], title: ST_AN[s.an][0] };
-  if (s.an === 'depcat') {
-    const depts = byDept.map(x => x[0]);
-    c.labels = depts; c.single = false;
-    c.series = byCat.map(([name]) => ({ name, data: depts.map(d => rs.filter(r => dk(r) === d && ck(r) === name).length) }));
+  const dk = r => r.dept || 'Sin departamento', total = rs.length, byDept = top(tally(dk));
+  const c = { s, sp, M, rs, total, topItem: top(tally(M.topFn))[0], topDept: byDept[0], title: sp.t };
+  if (sp.kind === 'matrix') {
+    const depts = byDept.map(x => x[0]); c.labels = depts; c.single = false;
+    c.series = top(tally(sp.fn)).map(([name]) => ({ name, data: depts.map(d => rs.filter(r => dk(r) === d && sp.fn(r) === name).length) }));
     c.head = ['Departamento', ...c.series.map(x => x.name), 'Total'];
     c.rows = depts.map((d, i) => { const v = c.series.map(x => x.data[i]); return [d, ...v, v.reduce((a, b) => a + b, 0)]; });
   } else {
-    const pairs = s.an === 'date' ? stPeriods(rs, s.grp) : s.an === 'cat' ? byCat : s.an === 'dept' ? byDept : s.an === 'urg' ? URG.map(u => [u, rs.filter(r => r.urg === u).length]) : top(tally(r => unm(r) || 'Sin nombre')).slice(0, 15);
+    let pairs;
+    if (sp.kind === 'date') pairs = stPeriods(rs, s.grp);
+    else { const m = tally(sp.fn); pairs = sp.fixed ? [...sp.fixed.map(k => [k, m.get(k) || 0]), ...[...m.entries()].filter(([k]) => !sp.fixed.includes(k))] : top(m); if (sp.limit) pairs = pairs.slice(0, sp.limit); }
     c.labels = pairs.map(p => p[0]); c.data = pairs.map(p => p[1]); c.single = true;
-    c.head = [{ date: 'Período', cat: 'Tipo de solicitud', dept: 'Departamento', urg: 'Urgencia', user: 'Usuario' }[s.an], 'Solicitudes', '% del total'];
+    c.head = [sp.kind === 'date' ? 'Período' : sp.first, 'Solicitudes', '% del total'];
     c.rows = pairs.map(([l, n]) => [l, n, total ? n / total : 0]);
   }
   return c;
 }
 function stCfg(c, th) {
-  const s = c.s, ct = s.ct, circ = ['pie', 'doughnut', 'polar'].includes(ct), horiz = ct === 'hbar' || ct === 'hstack', stacked = ct === 'stack' || ct === 'hstack', line = ct === 'line' || ct === 'area';
+  const s = c.s, ct = s.ct, circ = ['pie', 'doughnut', 'polar'].includes(ct), horiz = ct === 'hbar' || ct === 'hstack', stacked = ct === 'stack' || ct === 'hstack', line = ct === 'line' || ct === 'area', cm = c.sp.colors;
   const type = { line: 'line', area: 'line', pie: 'pie', doughnut: 'doughnut', polar: 'polarArea' }[ct] || 'bar';
-  const cols = s.an === 'urg' ? c.labels.map(l => ST_URG[l]) : c.labels.map((_, i) => ST_COL[i % ST_COL.length]);
+  const cols = cm ? c.labels.map(l => cm[l] || '#9ca3af') : c.labels.map((_, i) => ST_COL[i % ST_COL.length]);
   const datasets = c.single
     ? [line ? { label: 'Solicitudes', data: c.data, borderColor: ST_COL[0], backgroundColor: 'rgba(200,36,27,.15)', fill: ct === 'area', tension: .3, pointRadius: c.data.length > 60 ? 0 : 3, pointBackgroundColor: ST_COL[0] }
-      : { label: 'Solicitudes', data: c.data, backgroundColor: circ || s.an === 'urg' ? cols : ST_COL[0], borderColor: th.bg, borderWidth: circ ? 2 : 0, borderRadius: circ ? 0 : 4 }]
+      : { label: 'Solicitudes', data: c.data, backgroundColor: circ || cm ? cols : ST_COL[0], borderColor: th.bg, borderWidth: circ ? 2 : 0, borderRadius: circ ? 0 : 4 }]
     : c.series.map((d, i) => ({ label: d.name, data: d.data, backgroundColor: ST_COL[i % ST_COL.length], borderRadius: stacked ? 0 : 3 }));
   const num = { beginAtZero: true, stacked, ticks: { color: th.text, precision: 0 }, grid: { color: th.grid } };
-  const cat = { stacked, ticks: { color: th.text, autoSkip: s.an === 'date', maxRotation: 60 }, grid: { display: false } };
+  const cat = { stacked, ticks: { color: th.text, autoSkip: c.sp.kind === 'date', maxRotation: 60 }, grid: { display: false } };
   const bg = { id: 'bgw', beforeDraw(ch) { const x = ch.ctx; x.save(); x.globalCompositeOperation = 'destination-over'; x.fillStyle = '#fff'; x.fillRect(0, 0, ch.width, ch.height); x.restore(); } };
   return {
     type, data: { labels: c.labels, datasets }, plugins: th.white ? [bg] : [],
@@ -1314,25 +1357,26 @@ function tiStatsDraw() {
     const cv = document.getElementById('stCv'); if (!cv || ui.view !== 'stats') return;
     if (TICH) { try { TICH.destroy(); } catch (e) { } TICH = null; }
     const cs = getComputedStyle(document.documentElement), g = k => cs.getPropertyValue(k).trim();
-    TICH = new Chart(cv, stCfg(stCompute(), { text: g('--muted') || '#667085', grid: g('--line') || '#e3e6eb', bg: g('--surface') || '#fff', anim }));
+    const ga = getComputedStyle(document.getElementById('app')), h = k => ga.getPropertyValue(k).trim();
+    TICH = new Chart(cv, stCfg(stCompute(), { text: h('--muted') || g('--muted') || '#667085', grid: h('--line') || g('--line') || '#e3e6eb', bg: 'rgba(0,0,0,0)', anim }));
   }).catch(() => { const b = document.getElementById('stCvBox'); if (b) b.innerHTML = '<div class="empty">No se pudo cargar la librería de gráficos. Revisa tu conexión a internet.</div>'; });
 }
 function tiStats() {
-  const c = stCompute(), s = c.s;
+  const c = stCompute(), s = c.s, M = c.M;
   const sel = (k, l, o) => `<select data-chg="stf" data-k="${k}" style="width:auto;min-width:150px"><option value="">${l}</option>${o.map(x => `<option ${s[k] === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
   const pre = [['today', 'Hoy'], ['7', '7 días'], ['30', '30 días'], ['month', 'Este mes'], ['all', 'Todo']].map(([d, l]) => `<button class="btn sm" data-act="stpre" data-d="${d}">${l}</button>`).join('');
   const kpi = (v, l, txt) => `<div class="stat"><b${txt ? ' style="font-size:16px;line-height:1.35"' : ''}>${esc(String(v))}</b><span>${l}</span></div>`;
   const tbl = `<div class="tw"><table><thead><tr>${c.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${c.rows.map(r => `<tr>${r.map((v, i) => `<td${i ? ' style="text-align:center"' : ''}>${i === 0 ? '<b>' + esc(v) + '</b>' : c.single && i === 2 ? (v * 100).toFixed(1) + '%' : esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
-  return `<div class="between"><div><h1>Estadísticas</h1><p class="sub">Filtra las solicitudes que te llegan, elige cómo verlas y descárgalas en Excel.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
+  return `<div class="between"><div><h1>Estadísticas</h1><p class="sub">Filtra las ${M.name} que te llegan, elige cómo verlas y descárgalas en Excel.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
   <div class="panel stack"><h3>Filtros</h3>
     <div class="row" style="flex-wrap:wrap"><label class="row">Desde<input type="date" data-chg="stf" data-k="from" value="${s.from}" style="width:auto"></label><label class="row">Hasta<input type="date" data-chg="stf" data-k="to" value="${s.to}" style="width:auto"></label>${pre}</div>
-    <div class="row" style="flex-wrap:wrap">${sel('dept', 'Todos los departamentos', S.depts)}${sel('cat', 'Todos los tipos de solicitud', TI_CATS)}${sel('urg', 'Toda urgencia', URG)}<button class="btn sm" data-act="stclr">Limpiar filtros</button></div>
+    <div class="row" style="flex-wrap:wrap">${sel('dept', 'Todos los departamentos', S.depts)}${M.flt.map(([k, l, o]) => sel(k, l, o())).join('')}<button class="btn sm" data-act="stclr">Limpiar filtros</button></div>
   </div>
-  <div class="stats">${kpi(c.total, 'Solicitudes (según filtros)')}${kpi(c.topCat ? c.topCat[0] + ' · ' + c.topCat[1] : '—', 'Tipo que más llega', 1)}${kpi(c.topDept ? c.topDept[0] + ' · ' + c.topDept[1] : '—', 'Departamento que más solicita', 1)}</div>
+  <div class="stats">${kpi(c.total, 'Solicitudes (según filtros)')}${kpi(c.topItem ? c.topItem[0] + ' · ' + c.topItem[1] : '—', M.topLbl, 1)}${kpi(c.topDept ? c.topDept[0] + ' · ' + c.topDept[1] : '—', 'Departamento que más solicita', 1)}</div>
   <div class="panel stack">
     <div class="between"><h2 style="margin:0">${c.title}</h2><button class="btn primary" data-act="stxls">Descargar Excel</button></div>
-    <div class="row" style="flex-wrap:wrap"><label class="row">Ver<select data-chg="stf" data-k="an" style="width:auto">${Object.entries(ST_AN).map(([k, v]) => `<option value="${k}" ${s.an === k ? 'selected' : ''}>${v[0]}</option>`).join('')}</select></label>${s.an === 'date' ? `<label class="row">Agrupar por<select data-chg="stf" data-k="grp" style="width:auto">${[['day', 'Día'], ['week', 'Semana'], ['month', 'Mes']].map(([k, l]) => `<option value="${k}" ${s.grp === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : ''}</div>
-    <div class="row" style="flex-wrap:wrap"><span class="muted">Tipo de gráfico:</span>${ST_AN[s.an][1].map(k => `<button class="btn sm ${s.ct === k ? 'primary' : ''}" data-act="stct" data-c="${k}">${ST_CT[k]}</button>`).join('')}</div>
+    <div class="row" style="flex-wrap:wrap"><label class="row">Ver<select data-chg="stf" data-k="an" style="width:auto">${Object.entries(M.an).map(([k, v]) => `<option value="${k}" ${s.an === k ? 'selected' : ''}>${v.t}</option>`).join('')}</select></label>${c.sp.kind === 'date' ? `<label class="row">Agrupar por<select data-chg="stf" data-k="grp" style="width:auto">${[['day', 'Día'], ['week', 'Semana'], ['month', 'Mes']].map(([k, l]) => `<option value="${k}" ${s.grp === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : ''}</div>
+    <div class="row" style="flex-wrap:wrap"><span class="muted">Tipo de gráfico:</span>${c.sp.cts.map(k => `<button class="btn sm ${s.ct === k ? 'primary' : ''}" data-act="stct" data-c="${k}">${ST_CT[k]}</button>`).join('')}</div>
     ${c.total ? `<div id="stCvBox" style="position:relative;height:380px"><canvas id="stCv"></canvas></div>` : '<div class="empty">No hay solicitudes con estos filtros.</div>'}
   </div>
   ${c.total ? `<h2>Detalle</h2>${tbl}` : ''}`;
@@ -1345,19 +1389,19 @@ async function stImage(c) {
   const ch = new Chart(cv, cfg), png = cv.toDataURL('image/png'); ch.destroy(); return png;
 }
 async function stXls() {
-  const c = stCompute(), s = c.s; if (!c.total) return toast('No hay solicitudes con estos filtros');
+  const c = stCompute(), s = c.s, M = c.M; if (!c.total) return toast('No hay solicitudes con estos filtros');
   toast('Preparando Excel…');
   try { await loadLib(XLS_URL, 'ExcelJS'); } catch (e) { return toast('No se pudo cargar el generador de Excel. Revisa tu conexión a internet.'); }
   let png = null; try { png = await stImage(c); } catch (e) { console.error(e); }
   const wb = new ExcelJS.Workbook(); wb.creator = 'GilApp'; wb.created = new Date();
   const thin = { style: 'thin', color: { argb: 'FFE3E6EB' } }, hdr = row => row.eachCell(cl => { cl.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cl.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC8241B' } }; cl.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
   const ws = wb.addWorksheet('Resumen', { views: [{ showGridLines: false }] });
-  ws.getCell('A1').value = 'Estadísticas de solicitudes a TI'; ws.getCell('A1').font = { bold: true, size: 16 };
+  ws.getCell('A1').value = 'Estadísticas de ' + M.name; ws.getCell('A1').font = { bold: true, size: 16 };
   ws.getCell('A2').value = 'Ganadería Industrial Los Andes, C.A.';
   ws.getCell('A3').value = 'Generado: ' + new Date().toLocaleString('es');
-  const fl = []; if (s.from) fl.push('Desde ' + fDMY(s.from)); if (s.to) fl.push('Hasta ' + fDMY(s.to)); if (s.dept) fl.push('Departamento: ' + s.dept); if (s.cat) fl.push('Tipo: ' + s.cat); if (s.urg) fl.push('Urgencia: ' + s.urg);
+  const fl = []; if (s.from) fl.push('Desde ' + fDMY(s.from)); if (s.to) fl.push('Hasta ' + fDMY(s.to)); if (s.dept) fl.push('Departamento: ' + s.dept); M.flt.forEach(([k, l]) => { if (s[k]) fl.push(s[k]); });
   ws.getCell('A4').value = 'Filtros: ' + (fl.join(' · ') || 'ninguno (todas las solicitudes)');
-  [['Solicitudes (según filtros)', c.total], ['Tipo que más llega', c.topCat ? c.topCat[0] + ' (' + c.topCat[1] + ')' : '—'], ['Departamento que más solicita', c.topDept ? c.topDept[0] + ' (' + c.topDept[1] + ')' : '—']].forEach(([l, v], i) => { const r = ws.getRow(6 + i); r.getCell(1).value = l; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: 'left' }; });
+  [['Solicitudes (según filtros)', c.total], [M.topLbl, c.topItem ? c.topItem[0] + ' (' + c.topItem[1] + ')' : '—'], ['Departamento que más solicita', c.topDept ? c.topDept[0] + ' (' + c.topDept[1] + ')' : '—']].forEach(([l, v], i) => { const r = ws.getRow(6 + i); r.getCell(1).value = l; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: 'left' }; });
   ws.getCell('A10').value = c.title; ws.getCell('A10').font = { bold: true, size: 13 };
   const h = ws.getRow(11); c.head.forEach((x, i) => { h.getCell(i + 1).value = x; }); hdr(h);
   c.rows.forEach((r, i) => { const row = ws.getRow(12 + i); r.forEach((v, j) => { const cl = row.getCell(j + 1); cl.value = v; cl.border = { bottom: thin }; if (j) cl.alignment = { horizontal: 'center' }; if (c.single && j === 2) cl.numFmt = '0.0%'; }); });
@@ -1365,21 +1409,19 @@ async function stXls() {
   const last = 11 + c.rows.length;
   if (png) { const id = wb.addImage({ base64: png, extension: 'png' }); ws.addImage(id, { tl: { col: 0, row: last + 1 }, ext: { width: 820, height: 410 } }); }
   const w2 = wb.addWorksheet('Solicitudes', { views: [{ state: 'frozen', ySplit: 1 }] });
-  const cols = [['Fecha y hora', 18], ['Solicitante', 26], ['Usuario', 18], ['Departamento', 22], ['Tipo de solicitud', 28], ['Urgencia', 11], ['Descripción', 55], ['Estado', 13], ['Vista por TI', 18], ['En proceso', 18], ['Terminada por TI', 18], ['Terminada por el usuario', 18], ['Cerrada', 18]];
-  w2.columns = cols.map(([header, width]) => ({ header, width }));
-  const D = v => v ? new Date(v) : null;
-  c.rs.forEach(r => { const u = S.users.find(x => x.id === r.uid) || {}; w2.addRow([D(r.ts), unm(r), u.name || '', r.dept || '', r.cat, r.urg, r.text, ST_STL[r.state] || r.state, D(r.seen), D(r.procTs), D(r.tiDone), D(r.userDone), D(r.closed)]); });
-  hdr(w2.getRow(1)); [1, 9, 10, 11, 12, 13].forEach(i => { w2.getColumn(i).numFmt = 'dd/mm/yyyy hh:mm'; }); w2.getColumn(7).alignment = { wrapText: true, vertical: 'top' };
-  w2.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
+  w2.columns = M.cols.map(([header, width]) => ({ header, width }));
+  c.rs.forEach(r => { const u = S.users.find(x => x.id === r.uid) || {}; w2.addRow(M.row(r, u)); });
+  hdr(w2.getRow(1)); M.dateCols.forEach(i => { w2.getColumn(i).numFmt = 'dd/mm/yyyy hh:mm'; }); w2.getColumn(M.descCol).alignment = { wrapText: true, vertical: 'top' };
+  w2.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: M.cols.length } };
   try {
     const buf = await wb.xlsx.writeBuffer(), a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = 'estadisticas-ti-' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = 'estadisticas-' + M.file + '-' + new Date().toISOString().slice(0, 10) + '.xlsx';
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Excel descargado');
   } catch (e) { console.error(e); toast('No se pudo generar el Excel'); }
 }
 Object.assign(ACT, {
   stct: t => { stS().ct = t.dataset.c; ST_ANIM = true; render(); },
-  stclr: () => { const s = stS(); s.from = s.to = s.dept = s.cat = s.urg = ''; ST_ANIM = true; render(); },
+  stclr: () => { const s = stS(); s.from = s.to = s.dept = s.f1 = s.f2 = ''; ST_ANIM = true; render(); },
   stpre: t => {
     const s = stS(), d = t.dataset.d, now = new Date();
     if (d === 'all') s.from = s.to = ''; else if (d === 'today') s.from = s.to = fIso(now);
