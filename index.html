@@ -448,6 +448,7 @@ function render() {
   app.className = u.role === 'admin' ? '' : 'gw';
   app.innerHTML = u.role === 'admin' ? viewAdmin() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser();
   if (u.role === 'admin' && ui.view === 'subir') initUpload();
+  if (u.role === 'admin_ti' && ui.view === 'stats') tiStatsDraw();
 }
 
 /* ============ Autenticación ============ */
@@ -1055,7 +1056,7 @@ const TI_CATS = ['Falla de impresora', 'Falta de tinta / tóner', 'Falta de pape
 const URG = ['Baja', 'Media', 'Alta'];
 const places = () => [['General', ['Comedor', 'Recepción', 'Estacionamiento', 'Otro lugar']], ['Oficinas', S.depts.map(d => 'Oficina de ' + d)], ['Baños', S.depts.map(d => 'Baño de ' + d)]];
 const CFG = {
-  ti: { t: 'Solicitudes TI', f: 'cat', fl: 'Categoría', opts: () => TI_CATS, st: [['pendiente', 'En espera', 'warn', 'En espera'], ['proceso', 'En proceso', '', 'En proceso'], ['terminada', 'Terminadas por TI', 'ok', 'Terminada por TI'], ['incompleta', 'Incompletas', 'danger', 'Incompleta'], ['cerrada', 'Cerradas', 'ok', 'Cerrada'], ['aprobada', 'Aprobadas (anteriores)', 'ok', 'Aprobada']] },
+  ti: { t: 'Solicitudes TI', f: 'cat', fl: 'Categoría', opts: () => TI_CATS, st: [['pendiente', 'En espera', 'warn', 'En espera'], ['proceso', 'En proceso', '', 'En proceso'], ['terminada', 'En pausa (por confirmar)', 'warn', 'En pausa'], ['incompleta', 'Incompletas', 'danger', 'Incompleta'], ['cerrada', 'Terminadas', 'ok', 'Terminada'], ['aprobada', 'Aprobadas (anteriores)', 'ok', 'Aprobada']] },
   mant: { t: 'Solicitudes de mantenimiento', f: 'place', fl: 'Lugar', opts: () => places().flatMap(g => g[1]), st: [['enviada', 'Enviadas', 'warn', 'Enviada'], ['terminada', 'Terminadas', 'ok', 'Terminada'], ['pedido', 'En pedido', '', 'Solicitud de pedido'], ['gerente', 'Con el gerente', 'warn', 'Enviada al gerente'], ['contaduria', 'Por pasar a contaduría', 'ok', 'Por pasar a contaduría'], ['atencion', 'En atención', '', 'En atención'], ['aceptada', 'Aceptadas', 'ok', 'Aceptada'], ['pendiente', 'Pendientes', 'danger', 'Pendiente']] }
 };
 I.pc = '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
@@ -1175,43 +1176,46 @@ Object.assign(ACT, {
   gacept: t => askConfirm('¿Aceptar esta solicitud de pedido? Quedará como "Por pasar a contaduría".', () => { const r = S.mant.find(x => x.id === t.dataset.id); if (!r) return; r.state = 'contaduria'; r.acc = r.upd = Date.now(); r.accBy = dn(cur()); save(); toast('Solicitud aceptada'); render(); }, 'Aceptar')
 });
 
-/* ============ Solicitudes TI (A2): espera → proceso → terminada → historial ============ */
-const TIM = { wait: ['pendiente'], proc: ['proceso'], term: ['terminada'], inc: ['incompleta'] };
+/* ============ Solicitudes TI (A2): espera → proceso → en pausa → terminadas ============ */
+const TIM = { wait: ['pendiente'], proc: ['proceso'], pausa: ['terminada'], inc: ['incompleta'] };
+/* Lista mínima: solo nombre, fecha y hora, y "Ver" (todos los detalles y acciones van dentro de "Ver") */
 function tiTable(rs, mode) {
   if (!rs.length) return '<div class="tw"><div class="empty">No hay solicitudes.</div></div>';
-  const A = { wait: [['proceso', 'En proceso', 'primary'], ['incompleta', 'Incompleta', '']], proc: [['terminada', 'Terminada', 'primary'], ['incompleta', 'Incompleta', '']], term: [['incompleta', 'Incompleta', '']], inc: [['proceso', 'En proceso', 'primary'], ['terminada', 'Terminada', '']] }[mode] || [];
-  const act = r => `<button class="btn sm" data-act="tiver" data-id="${r.id}">Ver</button> ` + A.map(([st, l, c]) => `<button class="btn sm ${c}" data-act="tiset" data-id="${r.id}" data-s="${st}">${l}</button>`).join(' ');
-  const H = ['Usuario', 'Categoría', 'Urgencia', 'Descripción', 'Fecha', 'Estado', ''];
-  return searchBox('tb_req', 'Buscar solicitudes…') + `<div class="tw"><table><thead><tr>${H.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody id="tb_req">${rs.map(r => `<tr data-q="${esc(norm([unm(r), r.dept, r.cat, r.text].join(' ')))}"><td><b>${esc(unm(r))}</b><div class="small">${esc(r.dept) || '—'}${rolOf(r) && rolOf(r) !== 'Usuario' ? ' · ' + rolOf(r) : ''}</div></td><td>${esc(r.cat)}</td><td><span class="pill ${r.urg === 'Alta' ? 'danger' : r.urg === 'Media' ? 'warn' : 'gray'}">${esc(r.urg)}</span></td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${fmt(r.ts)}</td><td>${stP('ti', r.state)}${r.seen && r.state === 'pendiente' ? ' <span class="pill gray">Vista</span>' : ''}${r.userDone && r.state !== 'cerrada' ? ' <span class="pill ok">Usuario confirmó</span>' : ''}</td><td style="text-align:right;white-space:nowrap">${act(r)}</td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>`;
+  const H = ['Usuario', 'Fecha y hora', ''];
+  return searchBox('tb_req', 'Buscar solicitudes…') + `<div class="tw"><table><thead><tr>${H.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody id="tb_req">${rs.map(r => `<tr data-q="${esc(norm([unm(r), r.dept, r.cat, r.text].join(' ')))}"><td><b>${esc(unm(r))}</b>${r.userDone && r.state !== 'cerrada' ? ' <span class="pill ok">Usuario confirmó</span>' : ''}</td><td class="muted">${fmt(r.ts)}</td><td style="text-align:right"><button class="btn sm primary" data-act="tiver" data-id="${r.id}">Ver</button></td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>`;
 }
 function tiHist() {
   const h = ui.h || {}, all = S.ti.filter(r => r.state === 'cerrada' || r.state === 'aprobada');
   const rs = all.filter(r => (!h.user || r.uid === h.user) && (!h.dept || r.dept === h.dept) && (!h.cat || r.cat === h.cat) && (!h.urg || r.urg === h.urg) && (!h.from || r.ts >= new Date(h.from + 'T00:00:00').getTime()) && (!h.to || r.ts <= new Date(h.to + 'T23:59:59').getTime())).sort((a, b) => (b.closed || b.ts) - (a.closed || a.ts));
   const sel = (k, l, o) => `<select data-chg="hfil" data-k="${k}" style="width:auto;min-width:150px"><option value="">${l}</option>${o.map(([v, t]) => `<option value="${esc(v)}" ${h[k] === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
   const users = [...new Map(all.map(r => [r.uid, [r.uid, unm(r)]])).values()];
-  const T = v => v ? fmt(v) : '—', H = ['Fecha', 'Usuario', 'Departamento', 'Categoría', 'Urgencia', 'Descripción', 'Vista', 'En proceso', 'Terminada TI', 'Confirmada usuario', 'Cerrada'];
-  return `<h1>Historial</h1><p class="sub">Solicitudes cerradas (terminadas por TI y confirmadas por el usuario). Filtra y descarga lo que ves.</p><div class="row" style="flex-wrap:wrap;margin-bottom:12px">${sel('user', 'Todos los usuarios', users)}${sel('dept', 'Todos los departamentos', S.depts.map(d => [d, d]))}${sel('cat', 'Todas las categorías', TI_CATS.map(d => [d, d]))}${sel('urg', 'Toda urgencia', URG.map(d => [d, d]))}<label class="row">Desde<input type="date" data-chg="hfil" data-k="from" value="${h.from || ''}" style="width:auto"></label><label class="row">Hasta<input type="date" data-chg="hfil" data-k="to" value="${h.to || ''}" style="width:auto"></label><button class="btn sm" data-act="hclr">Limpiar</button><button class="btn sm primary" data-act="hcsv">Descargar historial</button></div>` + (rs.length ? searchBox('tb_hist', 'Buscar en el historial…') + `<div class="tw"><table><thead><tr>${H.map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody id="tb_hist">${rs.map(r => `<tr data-id="${r.id}" data-q="${esc(norm([unm(r), r.dept, r.cat, r.urg, r.text].join(' ')))}"><td class="muted">${fmt(r.ts)}</td><td><b>${esc(unm(r))}</b></td><td>${esc(r.dept) || '—'}</td><td>${esc(r.cat)}</td><td>${esc(r.urg)}</td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${T(r.seen)}</td><td class="muted">${T(r.procTs)}</td><td class="muted">${T(r.tiDone)}</td><td class="muted">${T(r.userDone)}</td><td class="muted">${T(r.closed)}</td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>` : '<div class="tw"><div class="empty">No hay solicitudes en el historial con estos filtros.</div></div>');
+  const T = v => v ? fmt(v) : '—', H = ['Fecha', 'Usuario', 'Departamento', 'Categoría', 'Urgencia', 'Descripción', 'Vista', 'En proceso', 'Terminada TI', 'Terminada por usuario', 'Cerrada', ''];
+  return `<h1>Terminadas</h1><p class="sub">Solicitudes que ya terminaron TI y el usuario. Filtra y descarga lo que ves.</p><div class="row" style="flex-wrap:wrap;margin-bottom:12px">${sel('user', 'Todos los usuarios', users)}${sel('dept', 'Todos los departamentos', S.depts.map(d => [d, d]))}${sel('cat', 'Todas las categorías', TI_CATS.map(d => [d, d]))}${sel('urg', 'Toda urgencia', URG.map(d => [d, d]))}<label class="row">Desde<input type="date" data-chg="hfil" data-k="from" value="${h.from || ''}" style="width:auto"></label><label class="row">Hasta<input type="date" data-chg="hfil" data-k="to" value="${h.to || ''}" style="width:auto"></label><button class="btn sm" data-act="hclr">Limpiar</button><button class="btn sm primary" data-act="hcsv">Descargar terminadas</button></div>` + (rs.length ? searchBox('tb_hist', 'Buscar en terminadas…') + `<div class="tw"><table><thead><tr>${H.map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody id="tb_hist">${rs.map(r => `<tr data-id="${r.id}" data-q="${esc(norm([unm(r), r.dept, r.cat, r.urg, r.text].join(' ')))}"><td class="muted">${fmt(r.ts)}</td><td><b>${esc(unm(r))}</b></td><td>${esc(r.dept) || '—'}</td><td>${esc(r.cat)}</td><td>${esc(r.urg)}</td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${T(r.seen)}</td><td class="muted">${T(r.procTs)}</td><td class="muted">${T(r.tiDone)}</td><td class="muted">${T(r.userDone)}</td><td class="muted">${T(r.closed)}</td><td style="text-align:right"><button class="btn sm" data-act="tiver" data-id="${r.id}">Ver</button></td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>` : '<div class="tw"><div class="empty">No hay solicitudes terminadas con estos filtros.</div></div>');
 }
 function viewTI() {
-  const u = cur(), v = (TIM[ui.view] || ['hist', 'cuenta'].includes(ui.view) || isU(ui.view)) ? ui.view : 'wait', n = k => S.ti.filter(r => TIM[k].includes(r.state)).length;
-  const nav = [['wait', 'Lista de espera', n('wait')], ['proc', 'En proceso', n('proc')], ['term', 'Terminadas', n('term')], ['inc', 'Incompletas', n('inc')], ['hist', 'Historial', 0], ['cuenta', 'Mi cuenta', 0]];
-  const T = { wait: ['Lista de espera', 'Solicitudes nuevas. Al pulsar <b>Ver</b> el usuario verá que ya la abriste; pásala a <b>En proceso</b> cuando vayas en camino.'], proc: ['En proceso', 'Las que estás atendiendo. Márcalas <b>Terminada</b> al acabar.'], term: ['Terminadas', 'Esperando que el usuario confirme. Cuando lo haga pasan al historial.'], inc: ['Incompletas', 'Tareas que quedaron pendientes.'] };
-  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'hist' ? tiHist() : `<div class="between"><div><h1>${T[v][0]}</h1><p class="sub">${T[v][1]}</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${tiTable(S.ti.filter(r => TIM[v].includes(r.state)).sort((a, b) => b.ts - a.ts), v)}`;
+  const u = cur(), v = (TIM[ui.view] || ['hist', 'stats', 'cuenta'].includes(ui.view) || isU(ui.view)) ? ui.view : 'wait', n = k => S.ti.filter(r => TIM[k].includes(r.state)).length;
+  const nav = [['wait', 'Lista de espera', n('wait')], ['proc', 'En proceso', n('proc')], ['pausa', 'En pausa', n('pausa')], ['inc', 'Incompletas', n('inc')], ['hist', 'Terminadas', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]];
+  const T = { wait: ['Lista de espera', 'Solicitudes nuevas. Pulsa <b>Ver</b> para ver todos los detalles (el usuario sabrá que ya la abriste) y pasarla a <b>En proceso</b> cuando vayas en camino.'], proc: ['En proceso', 'Las que estás atendiendo. Pulsa <b>Ver</b> y márcalas <b>Terminada</b> al acabar.'], pausa: ['En pausa', 'Ya las marcaste como terminadas y están <b>en pausa</b> hasta que el usuario también las dé por terminadas. Entonces pasan a la pestaña <b>Terminadas</b>.'], inc: ['Incompletas', 'Tareas que quedaron pendientes.'] };
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'hist' ? tiHist() : v === 'stats' ? tiStats() : `<div class="between"><div><h1>${T[v][0]}</h1><p class="sub">${T[v][1]}</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${tiTable(S.ti.filter(r => TIM[v].includes(r.state)).sort((a, b) => b.ts - a.ts), v)}`;
   return mShell('Solicitudes TI', nav, v, body, u);
 }
 Object.assign(ACT, {
   tiver: t => {
     const r = S.ti.find(x => x.id === t.dataset.id); if (!r) return;
     if (!r.seen) { r.seen = Date.now(); r.seenBy = dn(cur()); save(); render(); }
+    const us = S.users.find(x => x.id === r.uid) || {};
     const L = (l, ts) => `<div class="small">${l}: ${ts ? fmt(ts) : '—'}</div>`;
-    openModal(`<div class="modal"><div class="modal-h"><h2 style="margin:0">Solicitud de TI</h2>${stP('ti', r.state)}</div><div class="modal-b stack"><div><b>${esc(unm(r))}</b><div class="small">${esc(r.dept) || 'Sin departamento'}</div></div><div class="grid2"><div><div class="small">Categoría</div>${esc(r.cat)}</div><div><div class="small">Urgencia</div>${esc(r.urg)}</div></div><div><div class="small">Descripción</div><div style="white-space:pre-wrap">${esc(r.text)}</div></div><div>${L('Enviada', r.ts)}${L('Vista por TI', r.seen)}${L('En proceso', r.procTs)}${L('Terminada por TI', r.tiDone)}${L('Confirmada por el usuario', r.userDone)}</div></div><div class="modal-f"><button class="btn" data-act="close">Cerrar</button></div></div>`);
+    const A = { pendiente: [['proceso', 'En proceso', 'primary'], ['incompleta', 'Incompleta', '']], proceso: [['terminada', 'Terminada', 'primary'], ['incompleta', 'Incompleta', '']], terminada: [['incompleta', 'Incompleta', '']], incompleta: [['proceso', 'En proceso', 'primary'], ['terminada', 'Terminada', '']] }[r.state] || [];
+    const nota = r.state === 'terminada' ? '<div class="small">En pausa: esperando que el usuario también la dé por terminada.</div>' : r.userDone && r.state !== 'cerrada' ? '<div class="small">El usuario ya la dio por terminada; falta que la marques como terminada.</div>' : '';
+    openModal(`<div class="modal"><div class="modal-h"><h2 style="margin:0">Solicitud de TI</h2>${stP('ti', r.state)}</div><div class="modal-b stack"><div class="grid2"><div><div class="small">Solicitante</div><b>${esc(unm(r))}</b></div><div><div class="small">Usuario</div>${esc(us.name || '—')}</div></div><div class="grid2"><div><div class="small">Departamento</div>${esc(r.dept) || 'Sin departamento'}</div><div><div class="small">Cargo / rol</div>${esc(rolOf(r)) || '—'}</div></div><div class="grid2"><div><div class="small">Categoría</div>${esc(r.cat)}</div><div><div class="small">Urgencia</div>${esc(r.urg)}</div></div><div><div class="small">Descripción</div><div style="white-space:pre-wrap">${esc(r.text)}</div></div><div>${L('Enviada', r.ts)}${L('Vista por TI', r.seen)}${L('En proceso', r.procTs)}${L('Terminada por TI', r.tiDone)}${L('Terminada por el usuario', r.userDone)}${nota}</div></div><div class="modal-f"><button class="btn" data-act="close">Cerrar</button>${A.map(([st, l, c]) => `<button class="btn ${c}" data-act="tiset" data-id="${r.id}" data-s="${st}">${l}</button>`).join('')}</div></div>`);
   },
   tiset: t => {
     const r = S.ti.find(x => x.id === t.dataset.id); if (!r) return; const st = t.dataset.s, now = Date.now();
+    closeModal();
     r.state = st; r.upd = now; if (!r.seen) { r.seen = now; r.seenBy = dn(cur()); }
     if (st === 'proceso') r.procTs = now;
     if (st === 'terminada') { r.tiDone = now; if (r.userDone) { r.state = 'cerrada'; r.closed = now; } }
-    save(); toast(r.state === 'cerrada' ? 'Cerrada: pasó al historial' : 'Estado actualizado'); render();
+    save(); toast(r.state === 'cerrada' ? 'Terminada: pasó a la pestaña Terminadas' : r.state === 'terminada' ? 'En pausa: esperando que el usuario la dé por terminada' : 'Estado actualizado'); render();
   },
   tiuser: t => askConfirm('¿Confirmas que TI resolvió tu solicitud?', () => {
     const r = S.ti.find(x => x.id === t.dataset.id); if (!r) return; const now = Date.now(); r.userDone = now; r.upd = now;
@@ -1227,6 +1231,165 @@ Object.assign(ACT, {
   }
 });
 Object.assign(CHG, { hfil: t => { ui.h = ui.h || {}; ui.h[t.dataset.k] = t.value; render(); } });
+
+/* ============ Estadísticas TI ============ */
+const ST_AN = {
+  date: ['Solicitudes por fecha', ['line', 'area', 'bar']],
+  cat: ['Tipos de solicitud que más llegan', ['bar', 'hbar', 'pie', 'doughnut', 'polar']],
+  dept: ['Departamentos que más solicitan', ['bar', 'hbar', 'pie', 'doughnut', 'polar']],
+  depcat: ['Qué solicita cada departamento', ['stack', 'hstack', 'group']],
+  urg: ['Solicitudes por urgencia', ['bar', 'hbar', 'pie', 'doughnut', 'polar']],
+  user: ['Usuarios que más solicitan', ['hbar', 'bar', 'pie', 'doughnut']]
+};
+const ST_CT = { bar: 'Barras', hbar: 'Barras horizontales', line: 'Líneas', area: 'Área', pie: 'Torta', doughnut: 'Dona', polar: 'Polar', stack: 'Barras apiladas', hstack: 'Apiladas horizontales', group: 'Barras agrupadas' };
+const ST_COL = ['#c8241b', '#1f2937', '#f59e0b', '#2563eb', '#059669', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#9ca3af'];
+const ST_URG = { Baja: '#059669', Media: '#f59e0b', Alta: '#c8241b' };
+const ST_STL = { pendiente: 'En espera', proceso: 'En proceso', terminada: 'En pausa', incompleta: 'Incompleta', cerrada: 'Terminada', aprobada: 'Terminada' };
+const CHART_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', XLS_URL = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+let TICH = null, ST_ANIM = true; const LIBP = {};
+const stS = () => (ui.st = Object.assign({ an: 'cat', ct: 'bar', grp: 'day', from: '', to: '', dept: '', cat: '', urg: '' }, ui.st));
+const fIso = x => new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const fDMY = s => s ? s.split('-').reverse().join('/') : '';
+function loadLib(url, g) {
+  if (window[g]) return Promise.resolve();
+  return LIBP[g] = LIBP[g] || new Promise((ok, no) => { const el = document.createElement('script'); el.src = url; el.onload = () => window[g] ? ok() : (delete LIBP[g], no(new Error(g))); el.onerror = () => { delete LIBP[g]; no(new Error(g)); }; document.head.appendChild(el); });
+}
+function stPeriods(rs, grp) {
+  if (!rs.length) return [];
+  const key = ts => { const d = new Date(ts); return grp === 'month' ? new Date(d.getFullYear(), d.getMonth(), 1) : grp === 'week' ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)) : new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
+  const cnt = new Map(); rs.forEach(r => { const k = +key(r.ts); cnt.set(k, (cnt.get(k) || 0) + 1); });
+  const ks = [...cnt.keys()], end = Math.max(...ks), out = []; let d = new Date(Math.min(...ks));
+  const lbl = k => { const x = new Date(k); return grp === 'month' ? x.toLocaleDateString('es', { month: 'short', year: 'numeric' }) : (grp === 'week' ? 'Sem. ' : '') + x.toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
+  while (+d <= end && out.length < 800) { out.push([lbl(+d), cnt.get(+d) || 0]); d = grp === 'month' ? new Date(d.getFullYear(), d.getMonth() + 1, 1) : new Date(d.getFullYear(), d.getMonth(), d.getDate() + (grp === 'week' ? 7 : 1)); }
+  return out;
+}
+function stCompute() {
+  const s = stS(); if (!ST_AN[s.an][1].includes(s.ct)) s.ct = ST_AN[s.an][1][0];
+  const f = s.from ? new Date(s.from + 'T00:00:00').getTime() : 0, t = s.to ? new Date(s.to + 'T23:59:59').getTime() : Infinity;
+  const rs = S.ti.filter(r => r.ts >= f && r.ts <= t && (!s.dept || r.dept === s.dept) && (!s.cat || r.cat === s.cat) && (!s.urg || r.urg === s.urg)).sort((a, b) => a.ts - b.ts);
+  const tally = fn => { const m = new Map(); rs.forEach(r => { const k = fn(r); m.set(k, (m.get(k) || 0) + 1); }); return m; };
+  const top = m => [...m.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'es'));
+  const dk = r => r.dept || 'Sin departamento', ck = r => r.cat || 'Otro';
+  const byCat = top(tally(ck)), byDept = top(tally(dk)), total = rs.length;
+  const c = { s, rs, total, topCat: byCat[0], topDept: byDept[0], title: ST_AN[s.an][0] };
+  if (s.an === 'depcat') {
+    const depts = byDept.map(x => x[0]);
+    c.labels = depts; c.single = false;
+    c.series = byCat.map(([name]) => ({ name, data: depts.map(d => rs.filter(r => dk(r) === d && ck(r) === name).length) }));
+    c.head = ['Departamento', ...c.series.map(x => x.name), 'Total'];
+    c.rows = depts.map((d, i) => { const v = c.series.map(x => x.data[i]); return [d, ...v, v.reduce((a, b) => a + b, 0)]; });
+  } else {
+    const pairs = s.an === 'date' ? stPeriods(rs, s.grp) : s.an === 'cat' ? byCat : s.an === 'dept' ? byDept : s.an === 'urg' ? URG.map(u => [u, rs.filter(r => r.urg === u).length]) : top(tally(r => unm(r) || 'Sin nombre')).slice(0, 15);
+    c.labels = pairs.map(p => p[0]); c.data = pairs.map(p => p[1]); c.single = true;
+    c.head = [{ date: 'Período', cat: 'Tipo de solicitud', dept: 'Departamento', urg: 'Urgencia', user: 'Usuario' }[s.an], 'Solicitudes', '% del total'];
+    c.rows = pairs.map(([l, n]) => [l, n, total ? n / total : 0]);
+  }
+  return c;
+}
+function stCfg(c, th) {
+  const s = c.s, ct = s.ct, circ = ['pie', 'doughnut', 'polar'].includes(ct), horiz = ct === 'hbar' || ct === 'hstack', stacked = ct === 'stack' || ct === 'hstack', line = ct === 'line' || ct === 'area';
+  const type = { line: 'line', area: 'line', pie: 'pie', doughnut: 'doughnut', polar: 'polarArea' }[ct] || 'bar';
+  const cols = s.an === 'urg' ? c.labels.map(l => ST_URG[l]) : c.labels.map((_, i) => ST_COL[i % ST_COL.length]);
+  const datasets = c.single
+    ? [line ? { label: 'Solicitudes', data: c.data, borderColor: ST_COL[0], backgroundColor: 'rgba(200,36,27,.15)', fill: ct === 'area', tension: .3, pointRadius: c.data.length > 60 ? 0 : 3, pointBackgroundColor: ST_COL[0] }
+      : { label: 'Solicitudes', data: c.data, backgroundColor: circ || s.an === 'urg' ? cols : ST_COL[0], borderColor: th.bg, borderWidth: circ ? 2 : 0, borderRadius: circ ? 0 : 4 }]
+    : c.series.map((d, i) => ({ label: d.name, data: d.data, backgroundColor: ST_COL[i % ST_COL.length], borderRadius: stacked ? 0 : 3 }));
+  const num = { beginAtZero: true, stacked, ticks: { color: th.text, precision: 0 }, grid: { color: th.grid } };
+  const cat = { stacked, ticks: { color: th.text, autoSkip: s.an === 'date', maxRotation: 60 }, grid: { display: false } };
+  const bg = { id: 'bgw', beforeDraw(ch) { const x = ch.ctx; x.save(); x.globalCompositeOperation = 'destination-over'; x.fillStyle = '#fff'; x.fillRect(0, 0, ch.width, ch.height); x.restore(); } };
+  return {
+    type, data: { labels: c.labels, datasets }, plugins: th.white ? [bg] : [],
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: th.anim ? { duration: 450 } : false, indexAxis: horiz ? 'y' : 'x',
+      plugins: { legend: { display: circ || !c.single, position: 'bottom', labels: { color: th.text, boxWidth: 12 } }, title: th.white ? { display: true, text: c.title, color: '#111', font: { size: 16 } } : { display: false } },
+      scales: ct === 'polar' ? { r: { beginAtZero: true, ticks: { color: th.text, precision: 0, backdropColor: 'transparent' }, grid: { color: th.grid } } } : circ ? {} : horiz ? { x: num, y: cat } : { x: cat, y: num }
+    }
+  };
+}
+function tiStatsDraw() {
+  if (TICH) { try { TICH.destroy(); } catch (e) { } TICH = null; }
+  if (!document.getElementById('stCv')) return;
+  const anim = ST_ANIM; ST_ANIM = false;
+  loadLib(CHART_URL, 'Chart').then(() => {
+    const cv = document.getElementById('stCv'); if (!cv || ui.view !== 'stats') return;
+    if (TICH) { try { TICH.destroy(); } catch (e) { } TICH = null; }
+    const cs = getComputedStyle(document.documentElement), g = k => cs.getPropertyValue(k).trim();
+    TICH = new Chart(cv, stCfg(stCompute(), { text: g('--muted') || '#667085', grid: g('--line') || '#e3e6eb', bg: g('--surface') || '#fff', anim }));
+  }).catch(() => { const b = document.getElementById('stCvBox'); if (b) b.innerHTML = '<div class="empty">No se pudo cargar la librería de gráficos. Revisa tu conexión a internet.</div>'; });
+}
+function tiStats() {
+  const c = stCompute(), s = c.s;
+  const sel = (k, l, o) => `<select data-chg="stf" data-k="${k}" style="width:auto;min-width:150px"><option value="">${l}</option>${o.map(x => `<option ${s[k] === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
+  const pre = [['today', 'Hoy'], ['7', '7 días'], ['30', '30 días'], ['month', 'Este mes'], ['all', 'Todo']].map(([d, l]) => `<button class="btn sm" data-act="stpre" data-d="${d}">${l}</button>`).join('');
+  const kpi = (v, l, txt) => `<div class="stat"><b${txt ? ' style="font-size:16px;line-height:1.35"' : ''}>${esc(String(v))}</b><span>${l}</span></div>`;
+  const tbl = `<div class="tw"><table><thead><tr>${c.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${c.rows.map(r => `<tr>${r.map((v, i) => `<td${i ? ' style="text-align:center"' : ''}>${i === 0 ? '<b>' + esc(v) + '</b>' : c.single && i === 2 ? (v * 100).toFixed(1) + '%' : esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  return `<div class="between"><div><h1>Estadísticas</h1><p class="sub">Filtra las solicitudes que te llegan, elige cómo verlas y descárgalas en Excel.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
+  <div class="panel stack"><h3>Filtros</h3>
+    <div class="row" style="flex-wrap:wrap"><label class="row">Desde<input type="date" data-chg="stf" data-k="from" value="${s.from}" style="width:auto"></label><label class="row">Hasta<input type="date" data-chg="stf" data-k="to" value="${s.to}" style="width:auto"></label>${pre}</div>
+    <div class="row" style="flex-wrap:wrap">${sel('dept', 'Todos los departamentos', S.depts)}${sel('cat', 'Todos los tipos de solicitud', TI_CATS)}${sel('urg', 'Toda urgencia', URG)}<button class="btn sm" data-act="stclr">Limpiar filtros</button></div>
+  </div>
+  <div class="stats">${kpi(c.total, 'Solicitudes (según filtros)')}${kpi(c.topCat ? c.topCat[0] + ' · ' + c.topCat[1] : '—', 'Tipo que más llega', 1)}${kpi(c.topDept ? c.topDept[0] + ' · ' + c.topDept[1] : '—', 'Departamento que más solicita', 1)}</div>
+  <div class="panel stack">
+    <div class="between"><h2 style="margin:0">${c.title}</h2><button class="btn primary" data-act="stxls">Descargar Excel</button></div>
+    <div class="row" style="flex-wrap:wrap"><label class="row">Ver<select data-chg="stf" data-k="an" style="width:auto">${Object.entries(ST_AN).map(([k, v]) => `<option value="${k}" ${s.an === k ? 'selected' : ''}>${v[0]}</option>`).join('')}</select></label>${s.an === 'date' ? `<label class="row">Agrupar por<select data-chg="stf" data-k="grp" style="width:auto">${[['day', 'Día'], ['week', 'Semana'], ['month', 'Mes']].map(([k, l]) => `<option value="${k}" ${s.grp === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : ''}</div>
+    <div class="row" style="flex-wrap:wrap"><span class="muted">Tipo de gráfico:</span>${ST_AN[s.an][1].map(k => `<button class="btn sm ${s.ct === k ? 'primary' : ''}" data-act="stct" data-c="${k}">${ST_CT[k]}</button>`).join('')}</div>
+    ${c.total ? `<div id="stCvBox" style="position:relative;height:380px"><canvas id="stCv"></canvas></div>` : '<div class="empty">No hay solicitudes con estos filtros.</div>'}
+  </div>
+  ${c.total ? `<h2>Detalle</h2>${tbl}` : ''}`;
+}
+async function stImage(c) {
+  await loadLib(CHART_URL, 'Chart');
+  const cv = document.createElement('canvas'); cv.width = 820; cv.height = 410;
+  const cfg = stCfg(c, { text: '#475467', grid: '#e3e6eb', bg: '#ffffff', anim: false, white: true });
+  cfg.options.responsive = false; cfg.options.devicePixelRatio = 2;
+  const ch = new Chart(cv, cfg), png = cv.toDataURL('image/png'); ch.destroy(); return png;
+}
+async function stXls() {
+  const c = stCompute(), s = c.s; if (!c.total) return toast('No hay solicitudes con estos filtros');
+  toast('Preparando Excel…');
+  try { await loadLib(XLS_URL, 'ExcelJS'); } catch (e) { return toast('No se pudo cargar el generador de Excel. Revisa tu conexión a internet.'); }
+  let png = null; try { png = await stImage(c); } catch (e) { console.error(e); }
+  const wb = new ExcelJS.Workbook(); wb.creator = 'GilApp'; wb.created = new Date();
+  const thin = { style: 'thin', color: { argb: 'FFE3E6EB' } }, hdr = row => row.eachCell(cl => { cl.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cl.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC8241B' } }; cl.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
+  const ws = wb.addWorksheet('Resumen', { views: [{ showGridLines: false }] });
+  ws.getCell('A1').value = 'Estadísticas de solicitudes a TI'; ws.getCell('A1').font = { bold: true, size: 16 };
+  ws.getCell('A2').value = 'Ganadería Industrial Los Andes, C.A.';
+  ws.getCell('A3').value = 'Generado: ' + new Date().toLocaleString('es');
+  const fl = []; if (s.from) fl.push('Desde ' + fDMY(s.from)); if (s.to) fl.push('Hasta ' + fDMY(s.to)); if (s.dept) fl.push('Departamento: ' + s.dept); if (s.cat) fl.push('Tipo: ' + s.cat); if (s.urg) fl.push('Urgencia: ' + s.urg);
+  ws.getCell('A4').value = 'Filtros: ' + (fl.join(' · ') || 'ninguno (todas las solicitudes)');
+  [['Solicitudes (según filtros)', c.total], ['Tipo que más llega', c.topCat ? c.topCat[0] + ' (' + c.topCat[1] + ')' : '—'], ['Departamento que más solicita', c.topDept ? c.topDept[0] + ' (' + c.topDept[1] + ')' : '—']].forEach(([l, v], i) => { const r = ws.getRow(6 + i); r.getCell(1).value = l; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: 'left' }; });
+  ws.getCell('A10').value = c.title; ws.getCell('A10').font = { bold: true, size: 13 };
+  const h = ws.getRow(11); c.head.forEach((x, i) => { h.getCell(i + 1).value = x; }); hdr(h);
+  c.rows.forEach((r, i) => { const row = ws.getRow(12 + i); r.forEach((v, j) => { const cl = row.getCell(j + 1); cl.value = v; cl.border = { bottom: thin }; if (j) cl.alignment = { horizontal: 'center' }; if (c.single && j === 2) cl.numFmt = '0.0%'; }); });
+  ws.getColumn(1).width = 38; for (let i = 2; i <= c.head.length; i++) ws.getColumn(i).width = 18;
+  const last = 11 + c.rows.length;
+  if (png) { const id = wb.addImage({ base64: png, extension: 'png' }); ws.addImage(id, { tl: { col: 0, row: last + 1 }, ext: { width: 820, height: 410 } }); }
+  const w2 = wb.addWorksheet('Solicitudes', { views: [{ state: 'frozen', ySplit: 1 }] });
+  const cols = [['Fecha y hora', 18], ['Solicitante', 26], ['Usuario', 18], ['Departamento', 22], ['Tipo de solicitud', 28], ['Urgencia', 11], ['Descripción', 55], ['Estado', 13], ['Vista por TI', 18], ['En proceso', 18], ['Terminada por TI', 18], ['Terminada por el usuario', 18], ['Cerrada', 18]];
+  w2.columns = cols.map(([header, width]) => ({ header, width }));
+  const D = v => v ? new Date(v) : null;
+  c.rs.forEach(r => { const u = S.users.find(x => x.id === r.uid) || {}; w2.addRow([D(r.ts), unm(r), u.name || '', r.dept || '', r.cat, r.urg, r.text, ST_STL[r.state] || r.state, D(r.seen), D(r.procTs), D(r.tiDone), D(r.userDone), D(r.closed)]); });
+  hdr(w2.getRow(1)); [1, 9, 10, 11, 12, 13].forEach(i => { w2.getColumn(i).numFmt = 'dd/mm/yyyy hh:mm'; }); w2.getColumn(7).alignment = { wrapText: true, vertical: 'top' };
+  w2.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
+  try {
+    const buf = await wb.xlsx.writeBuffer(), a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = 'estadisticas-ti-' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Excel descargado');
+  } catch (e) { console.error(e); toast('No se pudo generar el Excel'); }
+}
+Object.assign(ACT, {
+  stct: t => { stS().ct = t.dataset.c; ST_ANIM = true; render(); },
+  stclr: () => { const s = stS(); s.from = s.to = s.dept = s.cat = s.urg = ''; ST_ANIM = true; render(); },
+  stpre: t => {
+    const s = stS(), d = t.dataset.d, now = new Date();
+    if (d === 'all') s.from = s.to = ''; else if (d === 'today') s.from = s.to = fIso(now);
+    else if (d === 'month') { s.from = fIso(new Date(now.getFullYear(), now.getMonth(), 1)); s.to = fIso(now); }
+    else { s.from = fIso(new Date(now.getTime() - (+d - 1) * 864e5)); s.to = fIso(now); }
+    ST_ANIM = true; render();
+  },
+  stxls: stXls
+});
+Object.assign(CHG, { stf: t => { stS()[t.dataset.k] = t.value; ST_ANIM = true; render(); } });
 
 /* Planilla F03-M05 · Solicitud de pedido */
 function plHtml(r, ro) {
