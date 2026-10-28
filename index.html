@@ -290,9 +290,9 @@ let idleT; const IDLE_MS = 15 * 60 * 1000;
 const idleReset = () => { clearTimeout(idleT); idleT = setTimeout(() => { if (ui.user) { ACT.logout(); toast('Sesión cerrada por inactividad'); } }, IDLE_MS); };
 ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev => document.addEventListener(ev, idleReset, { passive: true })); idleReset();
 const EMAIL = n => 'almacen.' + String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') + '@gmail.com';
-let S = { users: [], depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], lockdown: false };
+let S = { users: [], depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], firmas: [], lockdown: false };
 let SNAP = {};
-const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
+const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), tk: () => S.tk, stock: () => S.stock, firmas: () => S.firmas, ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
 function snapNow() {
   const m = {};
   for (const c in COLL) for (const x of COLL[c]()) m[c + '|' + x.id] = JSON.stringify(x);
@@ -327,7 +327,7 @@ function save() {
 async function loadAll() {
   const [p, it] = await Promise.all([SB.from('profiles').select('*'), SB.from('items').select('coll,id,data').limit(5000)]);
   if (p.error || it.error) throw (p.error || it.error);
-  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], lockdown: false };
+  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], firmas: [], lockdown: false };
   const UC = {}; for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'cargos') S.cargos.push(r.data.n); else if (r.coll === 'ucargo') UC[r.id] = r.data.cargo; else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (S[r.coll]) S[r.coll].push(r.data); }
   S.users.forEach(u => { u.cargo = UC[u.id] || ''; });
   SNAP = snapNow();
@@ -341,7 +341,7 @@ async function enter() {
   try { await loadAll(); } catch (e) { toast('Error al cargar: ' + (e.message || e)); return; }
   const u = S.users.find(x => x.id === session.user.id);
   if (!u) { await SB.auth.signOut(); ui.user = null; ui.err = 'Tu cuenta fue eliminada'; return render(); }
-  ui.user = u.id; ui.err = ''; ui.view = u.role === 'admin' ? 'resumen' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'recv' : u.role === 'admin_ti' ? 'wait' : u.role === 'gerente_mant' ? 'gq' : 'all'; ui.uview = 'desk'; ui.rs = ui.rcat = ui.rdep = ''; ui.h = {}; NSEEN = null; notifyScan(); render(); rtStart();
+  ui.user = u.id; ui.err = ''; ui.view = u.role === 'admin' ? 'resumen' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'recv' : u.role === 'admin_ti' ? 'wait' : u.role === 'gerente_mant' ? 'gq' : TKN[u.role] ? TKN[u.role][0][0] : 'all'; ui.st = null; ui.uview = 'desk'; ui.rs = ui.rcat = ui.rdep = ''; ui.h = {}; NSEEN = null; notifyScan(); render(); rtStart();
 }
 /* Archivos: Supabase Storage (bucket privado "documentos") */
 const MAX_BYTES = 10 * 1024 * 1024 * 1024;
@@ -455,9 +455,9 @@ function render() {
   if (!ui.user) { app.className = ''; app.innerHTML = viewAuth(); return; }
   const u = cur(); if (!u) { ui.user = null; return render(); }
   app.className = u.role === 'admin' ? '' : 'gw';
-  app.innerHTML = u.role === 'admin' ? viewAdmin() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser();
+  app.innerHTML = u.role === 'admin' ? viewAdmin() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : TKR[u.role] ? viewTK() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser();
   if (u.role === 'admin' && ui.view === 'subir') initUpload();
-  if ((u.role === 'admin_ti' || SUP[u.role]) && ui.view === 'stats') tiStatsDraw();
+  if (STROLES.includes(u.role) && ui.view === 'stats') tiStatsDraw();
 }
 
 /* ============ Autenticación ============ */
@@ -638,7 +638,7 @@ function userForm(u) {
       <label>Cargo<select name="cargo"><option value="">Sin cargo</option>${S.cargos.map(c => `<option ${u.cargo === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
       <div class="grid2">
         <label>Departamento<select name="dept"><option value="" ${!u.dept ? 'selected' : ''}>Sin asignar</option>${S.depts.map(d => `<option ${u.dept === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></label>
-        <label>Rol<select name="role"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin Biblioteca</option><option value="admin_ti" ${u.role === 'admin_ti' ? 'selected' : ''}>Admin TI</option><option value="sup_auto" ${u.role === 'sup_auto' ? 'selected' : ''}>Supervisor de Automotriz</option><option value="sup_infra" ${u.role === 'sup_infra' ? 'selected' : ''}>Supervisor de Infraestructura</option><option value="gerente_mant" ${u.role === 'gerente_mant' ? 'selected' : ''}>Gerente de Mantenimiento</option></select></label>
+        <label>Rol<select name="role"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin Biblioteca</option><option value="admin_ti" ${u.role === 'admin_ti' ? 'selected' : ''}>Admin TI</option><option value="sup_auto" ${u.role === 'sup_auto' ? 'selected' : ''}>Supervisor de Automotriz</option><option value="sup_infra" ${u.role === 'sup_infra' ? 'selected' : ''}>Supervisor de Infraestructura</option><option value="gerente_mant" ${u.role === 'gerente_mant' ? 'selected' : ''}>Gerente de Mantenimiento</option><option value="tk_crea" ${u.role === 'tk_crea' ? 'selected' : ''}>Atención al cliente (tickets)</option><option value="tk_desp" ${u.role === 'tk_desp' ? 'selected' : ''}>Despacho</option><option value="tk_ver" ${u.role === 'tk_ver' ? 'selected' : ''}>Verificación de tickets</option><option value="tk_alm" ${u.role === 'tk_alm' ? 'selected' : ''}>Almacén</option><option value="cobranza" ${u.role === 'cobranza' ? 'selected' : ''}>Cobranza</option></select></label>
       </div>
       <div class="err" id="uerr" hidden></div>
     </div>
@@ -654,7 +654,7 @@ function vNewU() {
     <label>Contraseña<input name="pass" required minlength="8"></label>
     <label>Departamento<select name="dept"><option value="">Sin asignar</option>${S.depts.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
     <label>Cargo<select name="cargo"><option value="">Sin cargo</option>${S.cargos.map(c => `<option>${esc(c)}</option>`).join('')}</select></label>
-    <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Admin Biblioteca</option><option value="admin_ti">Admin TI</option><option value="sup_auto">Supervisor de Automotriz</option><option value="sup_infra">Supervisor de Infraestructura</option><option value="gerente_mant">Gerente de Mantenimiento</option></select></label>
+    <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Admin Biblioteca</option><option value="admin_ti">Admin TI</option><option value="sup_auto">Supervisor de Automotriz</option><option value="sup_infra">Supervisor de Infraestructura</option><option value="gerente_mant">Gerente de Mantenimiento</option><option value="tk_crea">Atención al cliente (tickets)</option><option value="tk_desp">Despacho</option><option value="tk_ver">Verificación de tickets</option><option value="tk_alm">Almacén</option><option value="cobranza">Cobranza</option></select></label>
     <div class="err" id="uerr" hidden></div><div><button class="btn primary">Crear usuario</button></div></form>
   <div class="panel"><h3 style="margin-top:0">Reglas para crear un usuario</h3><ul style="padding-left:18px;line-height:1.7">
     <li>El nombre de usuario solo admite cifras numéricas: la <b>cédula</b>, que funciona como ID.</li>
@@ -754,7 +754,7 @@ function vCuenta() {
     <label>Contraseña actual (para confirmar el cambio)<input type="password" name="cur" required autocomplete="current-password"></label>
     <div class="err" id="cerr" hidden></div>
     <div><button class="btn primary">Guardar cambios</button></div>
-  </form>`;
+  </form>${u.role === 'gerente_mant' || SUP[u.role] ? sigPanel() : ''}`;
 }
 
 /* ============ Modales de permisos ============ */
@@ -1085,13 +1085,13 @@ const FORM = {
 };
 
 /* ============ Módulos 2 (TI) y 3 (Mantenimiento) ============ */
-const RL = { admin: 'Admin Biblioteca', admin_ti: 'Admin TI', admin_mant: 'Admin Mantenimiento', sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura', gerente_mant: 'Gerente de Mantenimiento', user: 'Usuario' };
+const RL = { admin: 'Admin Biblioteca', admin_ti: 'Admin TI', admin_mant: 'Admin Mantenimiento', sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura', gerente_mant: 'Gerente de Mantenimiento', tk_crea: 'Atención al cliente (tickets)', tk_desp: 'Despacho', tk_ver: 'Verificación de tickets', tk_alm: 'Almacén', cobranza: 'Cobranza', user: 'Usuario' };
 const TI_CATS = ['Falla de impresora', 'Falta de tinta / tóner', 'Falta de papel', 'Caída de internet', 'Falla de computadora', 'Problema con el correo', 'Sin acceso a sistema o clave', 'Instalación de software', 'Teléfono / telefonía', 'Otro'];
 const URG = ['Baja', 'Media', 'Alta'];
 const places = () => [['General', ['Comedor', 'Recepción', 'Estacionamiento', 'Otro lugar']], ['Oficinas', S.depts.map(d => 'Oficina de ' + d)], ['Baños', S.depts.map(d => 'Baño de ' + d)]];
 const CFG = {
   ti: { t: 'Solicitudes TI', f: 'cat', fl: 'Categoría', opts: () => TI_CATS, st: [['pendiente', 'En espera', 'warn', 'En espera'], ['proceso', 'En proceso', '', 'En proceso'], ['terminada', 'En pausa (por confirmar)', 'warn', 'En pausa'], ['incompleta', 'Incompletas', 'danger', 'Incompleta'], ['cerrada', 'Terminadas', 'ok', 'Terminada'], ['aprobada', 'Aprobadas (anteriores)', 'ok', 'Aprobada']] },
-  mant: { t: 'Solicitudes de mantenimiento', f: 'place', fl: 'Lugar', opts: () => places().flatMap(g => g[1]), st: [['enviada', 'Enviadas', 'warn', 'Enviada'], ['terminada', 'Terminadas', 'ok', 'Terminada'], ['pedido', 'En pedido', '', 'Solicitud de pedido'], ['gerente', 'Con el gerente', 'warn', 'Enviada al gerente'], ['contaduria', 'Por pasar a contaduría', 'ok', 'Por pasar a contaduría'], ['atencion', 'En atención', '', 'En atención'], ['aceptada', 'Aceptadas', 'ok', 'Aceptada'], ['pendiente', 'Pendientes', 'danger', 'Pendiente']] }
+  mant: { t: 'Solicitudes de mantenimiento', f: 'place', fl: 'Lugar', opts: () => places().flatMap(g => g[1]), st: [['enviada', 'Enviadas', 'warn', 'Enviada'], ['terminada', 'Terminadas', 'ok', 'Terminada'], ['pedido', 'En pedido', '', 'Solicitud de pedido'], ['gerente', 'Con el gerente', 'warn', 'Enviada al gerente'], ['contaduria', 'Por pasar a contaduría', 'ok', 'Por pasar a contaduría'], ['cobranza', 'En cobranza', 'ok', 'Enviada a cobranza'], ['atencion', 'En atención', '', 'En atención'], ['aceptada', 'Aceptadas', 'ok', 'Aceptada'], ['pendiente', 'Pendientes', 'danger', 'Pendiente']] }
 };
 I.pc = '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
 I.wrench = '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5 5L3 18l3 3 6.5-6.5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z"/></svg>';
@@ -1163,8 +1163,9 @@ function supTable(rs, mode) {
 
 function pcard(r, mode) {
   const p = r.pedido || {}, its = p.items || [];
-  const acts = mode === 'ger' ? (r.state === 'gerente' ? `<button class="btn sm primary" data-act="gacept" data-id="${r.id}">Aceptar</button>` : '') : r.state === 'pedido' ? `<button class="btn sm" data-act="sped" data-id="${r.id}">Editar planilla</button> <button class="btn sm primary" data-act="sger" data-id="${r.id}">Enviar al gerente de mantenimiento</button>` : '';
-  return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.rrole ? SUP[r.rrole] : 'Usuario'}</div></div>${stP('mant', r.state)}</div>${r.text ? `<div style="font-size:13px;white-space:pre-wrap">${esc(r.text)}</div>` : ''}<div class="muted" style="font-size:13px">${p.tipo === 'servicio' ? 'Servicio' : 'Compra'} · ${esc(p.unidad || '—')} · Centro de costos: ${esc(p.centro || '—')} · ${fmt(p.ts || r.ts)}</div><div style="font-size:13px">${its.slice(0, 4).map(x => '• ' + esc(x.desc) + ' — ' + esc(x.cant) + ' ' + esc(x.um)).join('<br>')}${its.length > 4 ? '<br>+' + (its.length - 4) + ' más' : ''}</div><div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button>${acts}</div></div>`;
+  const acts = mode === 'ger' ? (r.state === 'gerente' ? `<button class="btn sm primary" data-act="gacept" data-id="${r.id}">Aceptar</button>` : r.state === 'contaduria' ? `<button class="btn sm primary" data-act="gcob" data-id="${r.id}">Firmar y enviar a cobranza</button>` : '') : mode === 'cob' ? '' : r.state === 'pedido' ? `<button class="btn sm" data-act="sped" data-id="${r.id}">Editar planilla</button> <button class="btn sm primary" data-act="sger" data-id="${r.id}">Firmar y enviar al gerente de mantenimiento</button>` : '';
+  const chips = r.state === 'pedido' ? '' : `<div class="small">${p.firmaSup ? 'Firmada por el supervisor' : 'Sin firma del supervisor'} · ${p.firmaGer ? 'Firmada por el gerente' : 'Sin firma del gerente'}</div>`;
+  return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.rrole ? SUP[r.rrole] : 'Usuario'}</div></div>${stP('mant', r.state)}</div>${r.text ? `<div style="font-size:13px;white-space:pre-wrap">${esc(r.text)}</div>` : ''}<div class="muted" style="font-size:13px">${p.tipo === 'servicio' ? 'Servicio' : 'Compra'} · ${esc(p.unidad || '—')} · Centro de costos: ${esc(p.centro || '—')} · ${fmt(p.ts || r.ts)}</div><div style="font-size:13px">${its.slice(0, 4).map(x => '• ' + esc(x.desc) + ' — ' + esc(x.cant) + ' ' + esc(x.um)).join('<br>')}${its.length > 4 ? '<br>+' + (its.length - 4) + ' más' : ''}</div>${chips}<div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button><button class="btn sm" data-act="plpdf" data-id="${r.id}">Descargar PDF</button>${acts}</div></div>`;
 }
 function rcard(r) {
   return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.dept ? esc(r.dept) + ' · ' : ''}${r.rrole ? SUP[r.rrole] : (rolOf(r) || 'Usuario')}</div></div>${stP('mant', r.state)}</div><div style="font-size:13px;white-space:pre-wrap">${esc(r.text)}</div><div class="muted" style="font-size:13px">Enviada: ${fmt(r.ts)}${r.upd ? ' · Resuelta: ' + fmt(r.upd) : ''}</div>${r.pedido ? `<div class="row"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button></div>` : ''}</div>`;
@@ -1191,7 +1192,7 @@ function viewSup() {
   const open = inbox.filter(r => r.state === 'enviada'), done = inbox.filter(r => r.state === 'terminada');
   const mine = S.mant.filter(r => r.uid === u.id).sort((a, b) => b.ts - a.ts);
   const withP = [...inbox.filter(r => r.pedido && r.state !== 'terminada'), ...mine.filter(r => r.pedido)].sort((a, b) => (b.upd || b.ts) - (a.upd || a.ts));
-  const pend = withP.filter(r => r.state === 'pedido' || r.state === 'contaduria'), aprob = withP.filter(r => r.state === 'gerente');
+  const pend = withP.filter(r => ['pedido', 'contaduria', 'cobranza'].includes(r.state)), aprob = withP.filter(r => r.state === 'gerente');
   const nav = [['recv', 'Solicitudes recibidas', open.length], ['pend', 'Solicitudes pendientes', pend.filter(r => r.state === 'pedido').length], ['aprob', 'Pendientes por aprobar', aprob.length], ['mine', 'Mis solicitudes', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]];
   const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'stats' ? tiStats() : v === 'aprob'
     ? `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido que enviaste al gerente de mantenimiento y esperan su aprobación.</p>${pgrid(aprob, 'sup', 'No tienes solicitudes pendientes por aprobar.')}` : v === 'pend'
@@ -1202,15 +1203,15 @@ function viewSup() {
   return mShell('Mantenimiento', nav, v, body, u);
 }
 function viewGer() {
-  const u = cur(), v = ui.view, all = S.mant.filter(r => r.pedido && (r.state === 'gerente' || r.state === 'contaduria')).sort((a, b) => (b.sent || b.ts) - (a.sent || a.ts));
-  const q = all.filter(r => r.state === 'gerente'), acc = all.filter(r => r.state === 'contaduria');
-  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste.</p>${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría.</p>${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
-  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
+  const u = cur(), v = ui.view, all = S.mant.filter(r => r.pedido && ['gerente', 'contaduria', 'cobranza'].includes(r.state)).sort((a, b) => (b.cobTs || b.sent || b.ts) - (a.cobTs || a.sent || a.ts));
+  const q = all.filter(r => r.state === 'gerente'), acc = all.filter(r => r.state === 'contaduria'), cob = all.filter(r => r.state === 'cobranza');
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'gcob' ? `<h1>Enviadas a cobranza</h1><p class="sub">Solicitudes de pedido firmadas por ti que ya recibió cobranza.</p>${pgrid(cob, 'ger', 'Aún no has enviado solicitudes a cobranza.')}` : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste. Para enviarlas a cobranza debes <b>firmarlas</b>: sin tu firma no se pueden enviar.</p>${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría.</p>${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
+  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', acc.length], ['gcob', 'Enviadas a cobranza', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
 }
 let PNEW = null;
 Object.assign(ACT, {
   pnew: () => { const u = cur(); PNEW = { id: uid(), uid: u.id, uname: dn(u), dept: u.dept || '', rrole: u.role, area: 'gerencia', place: 'Solicitud de pedido propia', text: '', state: 'borrador', ts: Date.now() }; ACT.sped({ dataset: { id: PNEW.id } }); },
-  sger: t => askConfirm('¿Enviar esta solicitud de pedido al gerente de mantenimiento?', () => { const r = S.mant.find(x => x.id === t.dataset.id); if (!r) return; r.state = 'gerente'; r.sent = r.upd = Date.now(); save(); toast('Enviada al gerente'); render(); }, 'Enviar'),
+  sger: t => { const r = S.mant.find(x => x.id === t.dataset.id); if (!r || needFirma()) return; askPass('Firmar y enviar al gerente', () => { r.pedido = r.pedido || {}; r.pedido.firmaSup = myFirma(); r.state = 'gerente'; r.sent = r.upd = Date.now(); save(); toast('Firmada y enviada al gerente'); render(); }); },
   gacept: t => askConfirm('¿Aceptar esta solicitud de pedido? Quedará como "Por pasar a contaduría".', () => { const r = S.mant.find(x => x.id === t.dataset.id); if (!r) return; r.state = 'contaduria'; r.acc = r.upd = Date.now(); r.accBy = dn(cur()); save(); toast('Solicitud aceptada'); render(); }, 'Aceptar')
 });
 
@@ -1275,7 +1276,7 @@ const ST_CT = { bar: 'Barras', hbar: 'Barras horizontales', line: 'Líneas', are
 const ST_COL = ['#c8241b', '#1f2937', '#f59e0b', '#2563eb', '#059669', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#9ca3af'];
 const CT_SINGLE = ['bar', 'hbar', 'pie', 'doughnut', 'polar'], CT_DATE = ['line', 'area', 'bar'], CT_MAT = ['stack', 'hstack', 'group'];
 const ptype = p => /^Oficina de /.test(p || '') ? 'Oficinas' : /^Baño de /.test(p || '') ? 'Baños' : (p || 'Otro lugar');
-const mRes = r => r.state === 'enviada' ? 'Por atender' : r.state === 'terminada' ? 'Reparable' : ['pedido', 'gerente', 'contaduria'].includes(r.state) ? 'Requiere pedido' : 'Otro';
+const mRes = r => r.state === 'enviada' ? 'Por atender' : r.state === 'terminada' ? 'Reparable' : ['pedido', 'gerente', 'contaduria', 'cobranza'].includes(r.state) ? 'Requiere pedido' : 'Otro';
 const mStl = r => ((CFG.mant.st.find(x => x[0] === r.state) || [])[3]) || r.state;
 const tiStl = r => ({ pendiente: 'En espera', proceso: 'En proceso', terminada: 'En pausa', incompleta: 'Incompleta', cerrada: 'Terminada', aprobada: 'Terminada' })[r.state] || r.state;
 const stD = v => v ? new Date(v) : null;
@@ -1313,7 +1314,24 @@ const ST_CFG = {
     row: (r, u) => [stD(r.ts), unm(r), u.name || '', r.dept || '', r.place, r.text, mRes(r), mStl(r), stD(r.upd)]
   }
 };
-const stM = () => ST_CFG[cur().role === 'admin_ti' ? 'ti' : 'mant'];
+const tkItemsMulti = r => (r.items || []).map(x => [x.name + ' (' + uTxt(x.unit) + ')', 1]);
+const tkQtyMulti = r => (r.items || []).map(x => [x.name + ' (' + uTxt(x.unit) + ')', +(x.out != null ? x.out : x.qty) || 0]);
+const tkAn = () => ({
+  date: { t: 'Tickets por fecha', kind: 'date', cts: CT_DATE },
+  cliente: { t: 'Clientes que más piden', kind: 'count', fn: r => r.cliente || 'Sin nombre', limit: 15, first: 'Cliente', cnt: 'Tickets', cts: ['hbar', 'bar', 'pie', 'doughnut'] },
+  tipo: { t: 'Tipos de cliente', kind: 'count', fn: r => r.tipo || 'Sin tipo', first: 'Tipo de cliente', cnt: 'Tickets', cts: CT_SINGLE },
+  prod: { t: 'Productos más pedidos (n.º de tickets)', kind: 'count', multi: tkItemsMulti, limit: 15, first: 'Producto', cnt: 'Tickets', cts: CT_SINGLE },
+  cant: { t: 'Cantidad despachada por producto', kind: 'count', multi: tkQtyMulti, limit: 15, first: 'Producto', cnt: 'Cantidad', noPct: true, cts: CT_SINGLE }
+});
+const tkCols = [['N.º ticket', 16], ['Fecha y hora', 18], ['Cliente', 26], ['Tipo de cliente', 18], ['Creado por', 18], ['Productos', 50], ['Estado', 20], ['Enviado a despacho', 18], ['Salida para el cliente', 18], ['Confirmado', 18], ['Salida del almacén', 18], ['Enviado a cobranza', 18]];
+const tkRow = (r, u) => [r.no, stD(r.ts), r.cliente, r.tipo || '', r.uname, tkLines(r), (TKS[r.state] || [r.state])[0], stD(r.sent), stD(r.salidaTs), stD(r.verTs), stD(r.outTs), stD(r.cobTs)];
+const tkFlt = () => [['f1', 'Todos los tipos de cliente', () => [...new Set(S.tk.map(r => r.tipo || 'Sin tipo'))], r => r.tipo || 'Sin tipo'], ['f2', 'Todos los productos', () => [...new Set(S.tk.flatMap(r => (r.items || []).map(x => x.name)))], r => (r.items || []).map(x => x.name)]];
+ST_CFG.alm = { name: 'tickets de despacho', file: 'tickets-almacen', def: 'cliente', nodept: true, note: 'Registro de los últimos 3 meses (tickets con salida del almacén).', topLbl: 'Cliente que más pide', topFn: r => r.cliente || 'Sin nombre', k2: { lbl: 'Producto más pedido', multi: tkItemsMulti },
+  rows: () => S.tk.filter(r => ['despachado', 'cobranza'].includes(r.state) && r.ts >= Date.now() - 92 * 864e5), flt: tkFlt(), an: tkAn(), cols: tkCols, dateCols: [2, 8, 9, 10, 11, 12], descCol: 6, row: tkRow };
+ST_CFG.cob = { name: 'tickets de cobranza', file: 'tickets-cobranza', def: 'cliente', nodept: true, note: 'Tickets que ya recibiste en cobranza.', topLbl: 'Cliente que más pide', topFn: r => r.cliente || 'Sin nombre', k2: { lbl: 'Producto más pedido', multi: tkItemsMulti },
+  rows: () => S.tk.filter(r => r.state === 'cobranza'), flt: tkFlt(), an: tkAn(), cols: tkCols, dateCols: [2, 8, 9, 10, 11, 12], descCol: 6, row: tkRow };
+const STROLES = ['admin_ti', 'sup_auto', 'sup_infra', 'tk_alm', 'cobranza'];
+const stM = () => ST_CFG[({ admin_ti: 'ti', tk_alm: 'alm', cobranza: 'cob' })[cur().role] || 'mant'];
 const CHART_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', XLS_URL = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
 let TICH = null, ST_ANIM = true; const LIBP = {};
 const stS = () => (ui.st = Object.assign({ an: '', ct: 'bar', grp: 'day', from: '', to: '', dept: '', f1: '', f2: '' }, ui.st));
@@ -1335,11 +1353,12 @@ function stPeriods(rs, grp) {
 function stCompute() {
   const M = stM(), s = stS(); if (!M.an[s.an]) s.an = M.def; const sp = M.an[s.an]; if (!sp.cts.includes(s.ct)) s.ct = sp.cts[0];
   const f = s.from ? new Date(s.from + 'T00:00:00').getTime() : 0, t = s.to ? new Date(s.to + 'T23:59:59').getTime() : Infinity;
-  const rs = M.rows().filter(r => r.ts >= f && r.ts <= t && (!s.dept || r.dept === s.dept) && M.flt.every(([k, , , fn]) => !s[k] || fn(r) === s[k])).sort((a, b) => a.ts - b.ts);
+  const rs = M.rows().filter(r => r.ts >= f && r.ts <= t && (M.nodept || !s.dept || r.dept === s.dept) && M.flt.every(([k, , , fn]) => { if (!s[k]) return true; const v = fn(r); return Array.isArray(v) ? v.includes(s[k]) : v === s[k]; })).sort((a, b) => a.ts - b.ts);
   const tally = fn => { const m = new Map(); rs.forEach(r => { const k = fn(r); m.set(k, (m.get(k) || 0) + 1); }); return m; };
   const top = m => [...m.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'es'));
   const dk = r => r.dept || 'Sin departamento', total = rs.length, byDept = top(tally(dk));
-  const c = { s, sp, M, rs, total, topItem: top(tally(M.topFn))[0], topDept: byDept[0], title: sp.t };
+  const tallyK = k => { const m = new Map(); rs.forEach(r => (k.multi ? k.multi(r).map(x => x[0]) : [k.fn(r)]).forEach(x => m.set(x, (m.get(x) || 0) + 1))); return m; };
+  const c = { s, sp, M, rs, total, topItem: top(tally(M.topFn))[0], top2: M.k2 ? top(tallyK(M.k2))[0] : byDept[0], k2Lbl: M.k2 ? M.k2.lbl : 'Departamento que más solicita', title: sp.t };
   if (sp.kind === 'matrix') {
     const depts = byDept.map(x => x[0]); c.labels = depts; c.single = false;
     c.series = top(tally(sp.fn)).map(([name]) => ({ name, data: depts.map(d => rs.filter(r => dk(r) === d && sp.fn(r) === name).length) }));
@@ -1348,10 +1367,10 @@ function stCompute() {
   } else {
     let pairs;
     if (sp.kind === 'date') pairs = stPeriods(rs, s.grp);
-    else { const m = tally(sp.fn); pairs = sp.fixed ? [...sp.fixed.map(k => [k, m.get(k) || 0]), ...[...m.entries()].filter(([k]) => !sp.fixed.includes(k))] : top(m); if (sp.limit) pairs = pairs.slice(0, sp.limit); }
+    else { const m = sp.multi ? (() => { const mm = new Map(); rs.forEach(r => sp.multi(r).forEach(([k, w]) => mm.set(k, (mm.get(k) || 0) + w))); return mm; })() : tally(sp.fn); pairs = sp.fixed ? [...sp.fixed.map(k => [k, m.get(k) || 0]), ...[...m.entries()].filter(([k]) => !sp.fixed.includes(k))] : top(m); if (sp.limit) pairs = pairs.slice(0, sp.limit); }
     c.labels = pairs.map(p => p[0]); c.data = pairs.map(p => p[1]); c.single = true;
-    c.head = [sp.kind === 'date' ? 'Período' : sp.first, 'Solicitudes', '% del total'];
-    c.rows = pairs.map(([l, n]) => [l, n, total ? n / total : 0]);
+    c.head = [sp.kind === 'date' ? 'Período' : sp.first, sp.cnt || 'Solicitudes', ...(sp.noPct ? [] : ['% del total'])];
+    c.rows = pairs.map(([l, n]) => sp.noPct ? [l, n] : [l, n, total ? n / total : 0]);
   }
   return c;
 }
@@ -1393,17 +1412,17 @@ function tiStats() {
   const pre = [['today', 'Hoy'], ['7', '7 días'], ['30', '30 días'], ['month', 'Este mes'], ['all', 'Todo']].map(([d, l]) => `<button class="btn sm" data-act="stpre" data-d="${d}">${l}</button>`).join('');
   const kpi = (v, l, txt) => `<div class="stat"><b${txt ? ' style="font-size:16px;line-height:1.35"' : ''}>${esc(String(v))}</b><span>${l}</span></div>`;
   const tbl = `<div class="tw"><table><thead><tr>${c.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${c.rows.map(r => `<tr>${r.map((v, i) => `<td${i ? ' style="text-align:center"' : ''}>${i === 0 ? '<b>' + esc(v) + '</b>' : c.single && i === 2 ? (v * 100).toFixed(1) + '%' : esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
-  return `<div class="between"><div><h1>Estadísticas</h1><p class="sub">Filtra las ${M.name} que te llegan, elige cómo verlas y descárgalas en Excel.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
+  return `<div class="between"><div><h1>Estadísticas</h1><p class="sub">Filtra los datos de ${M.name}, elige cómo verlos y descárgalos en Excel. ${M.note || ''}</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
   <div class="panel stack"><h3>Filtros</h3>
     <div class="row" style="flex-wrap:wrap"><label class="row">Desde<input type="date" data-chg="stf" data-k="from" value="${s.from}" style="width:auto"></label><label class="row">Hasta<input type="date" data-chg="stf" data-k="to" value="${s.to}" style="width:auto"></label>${pre}</div>
-    <div class="row" style="flex-wrap:wrap">${sel('dept', 'Todos los departamentos', S.depts)}${M.flt.map(([k, l, o]) => sel(k, l, o())).join('')}<button class="btn sm" data-act="stclr">Limpiar filtros</button></div>
+    <div class="row" style="flex-wrap:wrap">${M.nodept ? '' : sel('dept', 'Todos los departamentos', S.depts)}${M.flt.map(([k, l, o]) => sel(k, l, o())).join('')}<button class="btn sm" data-act="stclr">Limpiar filtros</button></div>
   </div>
-  <div class="stats">${kpi(c.total, 'Solicitudes (según filtros)')}${kpi(c.topItem ? c.topItem[0] + ' · ' + c.topItem[1] : '—', M.topLbl, 1)}${kpi(c.topDept ? c.topDept[0] + ' · ' + c.topDept[1] : '—', 'Departamento que más solicita', 1)}</div>
+  <div class="stats">${kpi(c.total, M.nodept ? 'Tickets (según filtros)' : 'Solicitudes (según filtros)')}${kpi(c.topItem ? c.topItem[0] + ' · ' + c.topItem[1] : '—', M.topLbl, 1)}${kpi(c.top2 ? c.top2[0] + ' · ' + c.top2[1] : '—', c.k2Lbl, 1)}</div>
   <div class="panel stack">
     <div class="between"><h2 style="margin:0">${c.title}</h2><button class="btn primary" data-act="stxls">Descargar Excel</button></div>
     <div class="row" style="flex-wrap:wrap"><label class="row">Ver<select data-chg="stf" data-k="an" style="width:auto">${Object.entries(M.an).map(([k, v]) => `<option value="${k}" ${s.an === k ? 'selected' : ''}>${v.t}</option>`).join('')}</select></label>${c.sp.kind === 'date' ? `<label class="row">Agrupar por<select data-chg="stf" data-k="grp" style="width:auto">${[['day', 'Día'], ['week', 'Semana'], ['month', 'Mes']].map(([k, l]) => `<option value="${k}" ${s.grp === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : ''}</div>
     <div class="row" style="flex-wrap:wrap"><span class="muted">Tipo de gráfico:</span>${c.sp.cts.map(k => `<button class="btn sm ${s.ct === k ? 'primary' : ''}" data-act="stct" data-c="${k}">${ST_CT[k]}</button>`).join('')}</div>
-    ${c.total ? `<div id="stCvBox" style="position:relative;height:380px"><canvas id="stCv"></canvas></div>` : '<div class="empty">No hay solicitudes con estos filtros.</div>'}
+    ${c.total ? `<div id="stCvBox" style="position:relative;height:380px"><canvas id="stCv"></canvas></div>` : '<div class="empty">No hay registros con estos filtros.</div>'}
   </div>
   ${c.total ? `<h2>Detalle</h2>${tbl}` : ''}`;
 }
@@ -1425,9 +1444,9 @@ async function stXls() {
   ws.getCell('A1').value = 'Estadísticas de ' + M.name; ws.getCell('A1').font = { bold: true, size: 16 };
   ws.getCell('A2').value = 'Ganadería Industrial Los Andes, C.A.';
   ws.getCell('A3').value = 'Generado: ' + new Date().toLocaleString('es');
-  const fl = []; if (s.from) fl.push('Desde ' + fDMY(s.from)); if (s.to) fl.push('Hasta ' + fDMY(s.to)); if (s.dept) fl.push('Departamento: ' + s.dept); M.flt.forEach(([k, l]) => { if (s[k]) fl.push(s[k]); });
+  const fl = []; if (s.from) fl.push('Desde ' + fDMY(s.from)); if (s.to) fl.push('Hasta ' + fDMY(s.to)); if (s.dept && !M.nodept) fl.push('Departamento: ' + s.dept); M.flt.forEach(([k, l]) => { if (s[k]) fl.push(s[k]); });
   ws.getCell('A4').value = 'Filtros: ' + (fl.join(' · ') || 'ninguno (todas las solicitudes)');
-  [['Solicitudes (según filtros)', c.total], [M.topLbl, c.topItem ? c.topItem[0] + ' (' + c.topItem[1] + ')' : '—'], ['Departamento que más solicita', c.topDept ? c.topDept[0] + ' (' + c.topDept[1] + ')' : '—']].forEach(([l, v], i) => { const r = ws.getRow(6 + i); r.getCell(1).value = l; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: 'left' }; });
+  [[M.nodept ? 'Tickets (según filtros)' : 'Solicitudes (según filtros)', c.total], [M.topLbl, c.topItem ? c.topItem[0] + ' (' + c.topItem[1] + ')' : '—'], [c.k2Lbl, c.top2 ? c.top2[0] + ' (' + c.top2[1] + ')' : '—']].forEach(([l, v], i) => { const r = ws.getRow(6 + i); r.getCell(1).value = l; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: 'left' }; });
   ws.getCell('A10').value = c.title; ws.getCell('A10').font = { bold: true, size: 13 };
   const h = ws.getRow(11); c.head.forEach((x, i) => { h.getCell(i + 1).value = x; }); hdr(h);
   c.rows.forEach((r, i) => { const row = ws.getRow(12 + i); r.forEach((v, j) => { const cl = row.getCell(j + 1); cl.value = v; cl.border = { bottom: thin }; if (j) cl.alignment = { horizontal: 'center' }; if (c.single && j === 2) cl.numFmt = '0.0%'; }); });
@@ -1457,8 +1476,209 @@ Object.assign(ACT, {
   },
   stxls: stXls
 });
-Object.assign(CHG, { ucargo: t => { ui.ucargo = t.value; render(); } });
 Object.assign(CHG, { stf: t => { stS()[t.dataset.k] = t.value; ST_ANIM = true; render(); } });
+
+/* ============ Módulo 4: Tickets de despacho (Dailyn → Leovanny → Osmerly → Yorgely → Cobranza) ============ */
+const TKR = { tk_crea: 'Atención al cliente', tk_desp: 'Despacho', tk_ver: 'Verificación', tk_alm: 'Almacén', cobranza: 'Cobranza' };
+const TKS = { nuevo: ['Sin enviar', 'gray'], enviado: ['En despacho', 'warn'], salida: ['Por verificar', 'warn'], confirmado: ['Confirmado', ''], despachado: ['Salió del almacén', 'ok'], cobranza: ['En cobranza', 'ok'] };
+const tkP = s => { const x = TKS[s] || [s, 'gray']; return `<span class="pill ${x[1]}">${x[0]}</span>`; };
+const tkNo = () => { const d = new Date(); return 'T-' + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(); };
+const nq = n => (+n || 0).toLocaleString('es', { maximumFractionDigits: 2 });
+const uTxt = u => u === 'kg' ? 'kg' : 'unid.';
+const tkLines = r => (r.items || []).map(x => x.name + ': ' + nq(x.qty) + ' ' + uTxt(x.unit)).join('; ');
+const fp = ts => { const x = new Date(ts), p = n => String(n).padStart(2, '0'); return p(x.getDate()) + '/' + p(x.getMonth() + 1) + '/' + x.getFullYear() + ' ' + p(x.getHours()) + ':' + p(x.getMinutes()); };
+/* Lo que Leovanny ya marcó pero Yorgely aún no descuenta (queda "en el aire") */
+const stReserved = pid => S.tk.filter(r => ['salida', 'confirmado'].includes(r.state)).reduce((a, r) => a + (r.items || []).filter(x => x.pid === pid).reduce((b, x) => b + (+x.out || 0), 0), 0);
+const TKN = {
+  tk_crea: [['mis', 'Mis tickets'], ['nuevo', 'Nuevo ticket'], ['alm', 'Almacén'], ['cuenta', 'Mi cuenta']],
+  tk_desp: [['por', 'Por despachar'], ['hec', 'Con salida marcada'], ['rep', 'Repertorio de tickets'], ['alm', 'Almacén'], ['cuenta', 'Mi cuenta']],
+  tk_ver: [['por', 'Por verificar'], ['hec', 'Confirmados'], ['cuenta', 'Mi cuenta']],
+  tk_alm: [['por', 'Por dar salida'], ['cob', 'Por enviar a cobranza'], ['hec', 'Historial'], ['alm', 'Almacén'], ['stats', 'Estadísticas'], ['cuenta', 'Mi cuenta']],
+  cobranza: [['tk', 'Tickets recibidos'], ['ped', 'Pedidos de mantenimiento'], ['stats', 'Estadísticas'], ['cuenta', 'Mi cuenta']]
+};
+const TKF = {
+  tk_crea: { mis: r => r.uid === cur().id },
+  tk_desp: { por: r => r.state === 'enviado', hec: r => ['salida', 'confirmado', 'despachado', 'cobranza'].includes(r.state), rep: r => r.state !== 'nuevo' },
+  tk_ver: { por: r => r.state === 'salida', hec: r => ['confirmado', 'despachado', 'cobranza'].includes(r.state) },
+  tk_alm: { por: r => r.state === 'confirmado', cob: r => r.state === 'despachado', hec: r => r.state === 'cobranza' },
+  cobranza: { tk: r => r.state === 'cobranza' }
+};
+const TKT = {
+  mis: ['Mis tickets', 'Tickets que creaste. Envía a despacho los que estén sin enviar.'],
+  por: { tk_desp: ['Por despachar', 'Tickets que te envió atención al cliente. Revisa que estén listos y marca la <b>salida para el cliente</b>: el sistema aún no descuenta del almacén.'], tk_ver: ['Por verificar', 'Compara lo que se pidió con lo que despacho marcó y, si está correcto, da el <b>cierre total</b>.'], tk_alm: ['Por dar salida', 'Pedidos confirmados. Al marcar <b>Salida del almacén</b> el sistema descuenta la existencia.'] },
+  cob: ['Por enviar a cobranza', 'Pedidos que ya salieron del almacén. Envía el documento a cobranza.'],
+  hec: { tk_desp: ['Con salida marcada', 'Tickets en los que ya marcaste la salida para el cliente.'], tk_ver: ['Confirmados', 'Tickets que ya cerraste.'], tk_alm: ['Historial', 'Tickets que ya enviaste a cobranza.'] },
+  rep: ['Repertorio de tickets', 'Todos los tickets generados.'],
+  tk: ['Tickets recibidos', 'Tickets finales que llegaron a cobranza. Puedes descargarlos.']
+};
+const tkTitle = (k, role) => { const x = TKT[k]; return Array.isArray(x) ? x : x[role]; };
+
+function tkCard(r, role) {
+  const diff = x => x.out != null && +x.out !== +x.qty;
+  const lines = (r.items || []).map(x => `<div class="between" style="font-size:13px"><span>${esc(x.name)}</span><span class="${diff(x) ? '' : 'muted'}">${nq(x.qty)} ${uTxt(x.unit)}${x.out != null ? ' → despachar <b>' + nq(x.out) + '</b>' : ''}</span></div>`).join('');
+  const b = (a, l, c = '') => `<button class="btn sm ${c}" data-act="${a}" data-id="${r.id}">${l}</button>`;
+  const acts = (role === 'tk_crea' && r.state === 'nuevo' ? b('tksend', 'Enviar a despacho', 'primary') : '')
+    + (role === 'tk_desp' && r.state === 'enviado' ? b('tkout', 'Salida para el cliente', 'primary') : '')
+    + (role === 'tk_ver' && r.state === 'salida' ? b('tkver', 'Confirmar pedido (cierre total)', 'primary') : '')
+    + (role === 'tk_alm' && r.state === 'confirmado' ? b('tkalm', 'Salida del almacén', 'primary') : '')
+    + (role === 'tk_alm' && r.state === 'despachado' ? b('tkcob', 'Enviar a cobranza', 'primary') : '');
+  return `<div class="panel stack"><div class="between"><div><b>${esc(r.cliente)}</b><div class="small">${esc(r.no)} · ${esc(r.tipo || 'Sin tipo de cliente')} · ${esc(r.uname)}</div></div>${tkP(r.state)}</div>${lines}${r.nota ? `<div class="muted" style="font-size:13px;white-space:pre-wrap">${esc(r.nota)}</div>` : ''}<div class="muted" style="font-size:13px">${fmt(r.ts)}</div><div class="row" style="flex-wrap:wrap">${b('tkview', 'Ver')}${b('tkpdf', 'Descargar')}${acts}</div></div>`;
+}
+const tkGrid = (rs, role, empty) => rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(r => tkCard(r, role)).join('')}</div>` : `<div class="tw"><div class="empty">${empty}</div></div>`;
+
+function vAlm(role) {
+  const ed = role === 'tk_desp' || role === 'tk_alm';
+  const rows = [...S.stock].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  return `<div class="between"><div><h1>Almacén</h1><p class="sub">${ed ? 'Registra los productos y su existencia, en kilos o en unidades.' : 'Existencias del almacén (solo lectura).'} <b>Por salir</b> es lo que despacho ya marcó pero almacén aún no dio salida: todavía no se descuenta.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
+  ${ed ? `<form data-form="stockadd" class="panel row" style="flex-wrap:wrap;margin-bottom:14px"><input name="n" placeholder="Nombre del producto" required style="flex:2;min-width:180px"><select name="u" style="width:auto"><option value="kg">Kilos</option><option value="un">Unidades</option></select><input name="q" type="number" min="0" step="any" placeholder="Cantidad" required style="flex:1;min-width:110px"><button class="btn primary">Agregar producto</button></form>` : ''}
+  ${rows.length ? searchBox('tb_stock', 'Buscar producto…') : ''}<div class="tw"><table><thead><tr><th>Producto</th><th>Unidad</th><th>Existencia</th><th>Por salir</th><th>Disponible</th>${ed ? '<th></th>' : ''}</tr></thead><tbody id="tb_stock">${rows.map(p => { const rv = stReserved(p.id); return `<tr data-q="${esc(norm(p.name))}"><td><b>${esc(p.name)}</b></td><td>${p.unit === 'kg' ? 'Kilos' : 'Unidades'}</td><td>${nq(p.qty)}</td><td>${rv ? nq(rv) : '<span class="muted">0</span>'}</td><td><b>${nq(p.qty - rv)}</b></td>${ed ? `<td style="text-align:right;white-space:nowrap"><button class="btn sm" data-act="stockedit" data-id="${p.id}">Editar</button> <button class="btn sm danger" data-act="stockdel" data-id="${p.id}">Eliminar</button></td>` : ''}</tr>`; }).join('') || `<tr><td colspan="${ed ? 6 : 5}" class="empty">El almacén aún no tiene productos.</td></tr>`}${rows.length ? NORES(ed ? 6 : 5) : ''}</tbody></table></div>`;
+}
+const tkRowHtml = i => `<div class="row" style="flex-wrap:nowrap;margin-bottom:6px"><select name="p${i}" style="flex:2"><option value="">Producto…</option>${S.stock.map(p => `<option value="${esc(p.id)}">${esc(p.name)} (${uTxt(p.unit)})</option>`).join('')}</select><input name="q${i}" type="number" min="0" step="any" placeholder="Cantidad" style="flex:1"></div>`;
+function vTkNew() {
+  return `<h1>Nuevo ticket</h1><p class="sub">Registra la información del cliente y los productos. Al guardarlo puedes enviarlo directo a despacho.</p>
+  ${S.stock.length ? '' : '<div class="panel" style="max-width:640px;margin-bottom:12px">El almacén aún no tiene productos. Pide a despacho o a almacén que los registren para poder armar el ticket.</div>'}
+  <form id="tkform" data-form="tknew" data-send="0" class="panel stack" style="max-width:640px">
+    <label>Cliente<input name="cliente" required></label>
+    <label>Tipo de cliente<input name="tipo" list="tk_tipos" placeholder="Ej.: Mayorista"><datalist id="tk_tipos">${[...new Set(S.tk.map(r => r.tipo).filter(Boolean))].map(x => `<option value="${esc(x)}">`).join('')}</datalist></label>
+    <div><label>Productos</label><div id="tkrows" style="margin-top:6px">${[0, 1, 2].map(tkRowHtml).join('')}</div><button type="button" class="btn sm" data-act="tkaddrow">Añadir producto</button></div>
+    <label>Observaciones<textarea name="nota" rows="2"></textarea></label>
+    <div class="row" style="flex-wrap:wrap"><button type="button" class="btn" data-act="tksave" data-send="0">Guardar sin enviar</button><button type="button" class="btn primary" data-act="tksave" data-send="1">Guardar y enviar a despacho</button></div>
+  </form>`;
+}
+function viewTK() {
+  const u = cur(), role = u.role, N = TKN[role], v = (isU(ui.view) || N.some(x => x[0] === ui.view)) ? ui.view : N[0][0];
+  const list = k => S.tk.filter(TKF[role][k] || (() => false)).sort((a, b) => b.ts - a.ts);
+  const cnt = k => ['por', 'cob', 'tk'].includes(k) ? list(k).length : k === 'ped' ? S.mant.filter(r => r.state === 'cobranza').length : 0;
+  const nav = N.map(([k, l]) => [k, l, cnt(k)]);
+  let body;
+  if (isU(v)) body = uBody(); else if (v === 'cuenta') body = vCuenta(); else if (v === 'stats') body = tiStats(); else if (v === 'alm') body = vAlm(role); else if (v === 'nuevo') body = vTkNew();
+  else if (v === 'ped') body = `<div class="between"><div><h1>Pedidos de mantenimiento</h1><p class="sub">Solicitudes de pedido firmadas que envió el gerente de mantenimiento. Puedes ver y descargar cada planilla.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${pgrid(S.mant.filter(r => r.state === 'cobranza').sort((a, b) => (b.cobTs || b.ts) - (a.cobTs || a.ts)), 'cob', 'Aún no has recibido solicitudes de pedido.')}`;
+  else { const T = tkTitle(v, role); body = `<div class="between"><div><h1>${T[0]}</h1><p class="sub">${T[1]}</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${tkGrid(list(v), role, 'No hay tickets aquí.')}`; }
+  return mShell(TKR[role], nav, v, body, u);
+}
+
+/* ---- PDF (ticket y planilla) ---- */
+const PDF_URL = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+async function pdfNew() { await loadLib(PDF_URL, 'jspdf'); return new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' }); }
+async function tkPdf(r) {
+  toast('Preparando PDF…'); let d;
+  try { d = await pdfNew(); } catch (e) { return toast('No se pudo cargar el generador de PDF. Revisa tu conexión a internet.'); }
+  const W = 210, m = 15; let y = 18;
+  d.setFont('helvetica', 'bold'); d.setFontSize(15); d.text('Ganadería Industrial Los Andes, C.A.', m, y); y += 7;
+  d.setFontSize(12); d.text('TICKET DE DESPACHO  ' + r.no, m, y); y += 4; d.setDrawColor(200, 36, 27); d.setLineWidth(.8); d.line(m, y, W - m, y); y += 8;
+  d.setFontSize(10);
+  const kv = (k, v) => { d.setFont('helvetica', 'bold'); d.text(k, m, y); d.setFont('helvetica', 'normal'); const t = d.splitTextToSize(String(v || '-'), W - m * 2 - 38); d.text(t, m + 38, y); y += 5.5 * t.length; };
+  kv('Fecha:', fp(r.ts)); kv('Cliente:', r.cliente); kv('Tipo de cliente:', r.tipo); kv('Creado por:', r.uname); kv('Estado:', (TKS[r.state] || [r.state])[0]); if (r.nota) kv('Observaciones:', r.nota);
+  y += 4; d.setFont('helvetica', 'bold'); d.setFillColor(200, 36, 27); d.rect(m, y - 5, W - 2 * m, 7.5, 'F'); d.setTextColor(255, 255, 255); d.text('Producto', m + 2, y); d.text('Solicitado', 120, y); d.text('A despachar', 156, y); d.setTextColor(0, 0, 0); y += 8; d.setFont('helvetica', 'normal');
+  (r.items || []).forEach(x => { if (y > 270) { d.addPage(); y = 20; } d.text(String(x.name), m + 2, y); d.text(nq(x.qty) + ' ' + uTxt(x.unit), 120, y); d.text(x.out != null ? nq(x.out) + ' ' + uTxt(x.unit) : '-', 156, y); d.setDrawColor(220, 220, 220); d.setLineWidth(.2); d.line(m, y + 2, W - m, y + 2); y += 7; });
+  y += 5; if (y > 265) { d.addPage(); y = 20; } d.setFont('helvetica', 'bold'); d.text('Recorrido del ticket', m, y); y += 6; d.setFont('helvetica', 'normal');
+  (r.hist || []).forEach(h => { if (y > 280) { d.addPage(); y = 20; } d.text(fp(h.ts) + '  -  ' + h.a + ' (' + h.by + ')', m, y); y += 5.2; });
+  d.setFontSize(8); d.setTextColor(120, 120, 120); d.text('Generado el ' + fp(Date.now()) + ' desde GilApp', m, 290);
+  d.save(r.no + '.pdf');
+}
+async function plPdf(r) {
+  toast('Preparando PDF…'); let d;
+  try { d = await pdfNew(); } catch (e) { return toast('No se pudo cargar el generador de PDF. Revisa tu conexión a internet.'); }
+  const p = r.pedido || {}, W = 210, m = 15; let y = 18;
+  d.setFont('helvetica', 'bold'); d.setFontSize(15); d.text('SOLICITUD DE PEDIDO', m, y); d.setFontSize(10); d.text('F03-M05', W - m - 20, y); y += 4; d.setDrawColor(200, 36, 27); d.setLineWidth(.8); d.line(m, y, W - m, y); y += 8; d.setFontSize(10);
+  const kv = (k, v) => { d.setFont('helvetica', 'bold'); d.text(k, m, y); d.setFont('helvetica', 'normal'); const t = d.splitTextToSize(String(v || '-'), W - m * 2 - 52); d.text(t, m + 52, y); y += 5.5 * t.length; };
+  kv('1. Fecha de la solicitud:', p.fecha); kv('2. Tipo de pedido:', p.tipo === 'servicio' ? 'Servicio' : 'Compra'); kv('3. Unidad solicitante:', p.unidad); kv('4. Centro de costos:', p.centro); kv('Solicitud:', (r.place || '') + (r.text ? ' - ' + r.text : ''));
+  y += 3; d.setFont('helvetica', 'bold'); d.setFillColor(200, 36, 27); d.rect(m, y - 5, W - 2 * m, 7.5, 'F'); d.setTextColor(255, 255, 255); d.text('Item', m + 2, y); d.text('5. Descripcion del requerimiento', m + 14, y); d.text('6. Cantidad', 140, y); d.text('7. U. medida', 166, y); d.setTextColor(0, 0, 0); y += 8; d.setFont('helvetica', 'normal');
+  (p.items || []).forEach((x, i) => { if (y > 255) { d.addPage(); y = 20; } d.text(String(i + 1), m + 2, y); const t = d.splitTextToSize(String(x.desc || ''), 118); d.text(t, m + 14, y); d.text(String(x.cant || ''), 140, y); d.text(String(x.um || ''), 166, y); y += 5.5 * t.length; d.setDrawColor(220, 220, 220); d.setLineWidth(.2); d.line(m, y - 2.5, W - m, y - 2.5); y += 1.5; });
+  y += 3; kv('8. Observaciones:', p.obs);
+  const sig = (title, s, nombre, cargo) => { if (y > 225) { d.addPage(); y = 20; } d.setFont('helvetica', 'bold'); d.text(title, m, y); y += 4; d.setFont('helvetica', 'normal'); d.setDrawColor(150, 150, 150); d.rect(m, y, 80, 28); if (s && s.img) { try { d.addImage(s.img, 'PNG', m + 2, y + 1, 50, 18); } catch (e) { } d.setFontSize(8); d.text(s.name + ' - ' + fp(s.ts), m + 2, y + 24); d.setFontSize(10); } d.text('Nombre: ' + (nombre || '-'), m + 86, y + 8); d.text('Cargo: ' + (cargo || '-'), m + 86, y + 15); y += 36; };
+  sig('9. Validacion del solicitante (Responsable de la unidad)', p.firmaSup, p.nombre || (p.firmaSup || {}).name, p.cargo || (p.firmaSup || {}).cargo);
+  sig('Aprobacion: Gerente de Mantenimiento', p.firmaGer, (p.firmaGer || {}).name, (p.firmaGer || {}).cargo);
+  d.setFontSize(8); d.setTextColor(120, 120, 120); d.text('Generado el ' + fp(Date.now()) + ' desde GilApp', m, 290);
+  d.save('solicitud-pedido-' + String(r.id).slice(0, 6) + '.pdf');
+}
+
+/* ---- Firma digital (se registra en Mi cuenta y se estampa pidiendo la contraseña) ---- */
+const sigImg = s => `<img src="${s.img}" alt="Firma" style="height:46px;background:#fff;border-radius:4px;padding:2px"> <span class="small">${esc(s.name)} · ${fp(s.ts)}</span>`;
+const sigPanel = () => { const f = S.firmas.find(x => x.id === cur().id); return `<div class="panel stack" style="max-width:480px;margin-top:14px"><h3 style="margin:0">Mi firma digital</h3><div class="muted">Dibuja tu firma con el dedo o el mouse. Se estampa en las solicitudes de pedido cuando las firmas y confirmas con tu contraseña.</div>${f ? `<div><div class="small">Firma guardada:</div><img src="${f.img}" alt="" style="max-width:300px;background:#fff;border:1px solid var(--line);border-radius:8px"></div>` : ''}<canvas id="sigcv" width="440" height="160" style="background:#fff;border:1px dashed var(--muted);border-radius:8px;touch-action:none;max-width:100%;cursor:crosshair"></canvas><div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sigclr">Borrar trazo</button><button class="btn sm primary" data-act="sigsave">Guardar firma</button>${f ? '<button class="btn sm danger" data-act="sigdel">Eliminar firma guardada</button>' : ''}</div></div>`; };
+let SIGD = false, SIGHAS = false, SIGNCB = null;
+const sigPt = (e, c) => { const b = c.getBoundingClientRect(); return [(e.clientX - b.left) * c.width / b.width, (e.clientY - b.top) * c.height / b.height]; };
+document.addEventListener('pointerdown', e => { if (e.target.id !== 'sigcv') return; SIGD = true; const c = e.target, p = sigPt(e, c), x = c.getContext('2d'); x.lineWidth = 2.4; x.lineCap = x.lineJoin = 'round'; x.strokeStyle = '#111'; x.beginPath(); x.moveTo(p[0], p[1]); x.lineTo(p[0] + .1, p[1] + .1); x.stroke(); SIGHAS = true; e.preventDefault(); });
+document.addEventListener('pointermove', e => { if (!SIGD) return; const c = $('#sigcv'); if (!c) return; const p = sigPt(e, c), x = c.getContext('2d'); x.lineTo(p[0], p[1]); x.stroke(); });
+document.addEventListener('pointerup', () => { SIGD = false; });
+const myFirma = () => { const u = cur(), f = S.firmas.find(x => x.id === u.id); return f ? { img: f.img, name: dn(u), cargo: RL[u.role], ts: Date.now() } : null; };
+function askPass(title, cb) {
+  SIGNCB = cb;
+  openModal(`<div class="modal" style="max-width:420px"><form data-form="signok"><div class="modal-b stack"><h2 style="margin:0">${esc(title)}</h2><div class="muted">Confirma con tu contraseña para estampar tu firma digital.</div><label>Contraseña<input type="password" name="p" required autocomplete="current-password"></label><div class="err" id="serr" hidden></div></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Firmar</button></div></form></div>`);
+}
+const needFirma = () => { if (S.firmas.some(x => x.id === cur().id)) return false; toast('Primero registra tu firma en Mi cuenta'); ui.view = 'cuenta'; closeModal(); render(); return true; };
+FORM.signok = async f => {
+  const me = (await SB.auth.getUser()).data.user, chk = await SB.auth.signInWithPassword({ email: me.email, password: f.p.value });
+  if (chk.error) { const e = $('#serr'); e.textContent = 'Contraseña incorrecta'; e.hidden = false; return; }
+  const cb = SIGNCB; SIGNCB = null; closeModal(); if (cb) cb();
+};
+
+/* ---- Formularios y acciones de tickets ---- */
+const tkLog = (r, a) => { (r.hist = r.hist || []).push({ a, by: dn(cur()), ts: Date.now() }); };
+FORM.tknew = f => {
+  const u = cur(), items = [];
+  for (let i = 0; i < 10; i++) { const p = f['p' + i]; if (!p || !p.value) continue; const sp = S.stock.find(x => x.id === p.value), q = parseFloat(f['q' + i].value); if (!sp || !(q > 0)) return toast('Revisa las cantidades: deben ser mayores que 0'); items.push({ pid: sp.id, name: sp.name, unit: sp.unit, qty: q }); }
+  const cl = f.cliente.value.trim(); if (!cl) return toast('Escribe el cliente'); if (!items.length) return toast('Agrega al menos un producto');
+  const send = f.dataset.send === '1', now = Date.now();
+  S.tk.push({ id: uid(), no: tkNo(), uid: u.id, uname: dn(u), cliente: cl, tipo: f.tipo.value.trim(), nota: f.nota.value.trim(), items, state: send ? 'enviado' : 'nuevo', ts: now, sent: send ? now : 0, hist: [{ a: 'Ticket creado', by: dn(u), ts: now }, ...(send ? [{ a: 'Enviado a despacho', by: dn(u), ts: now }] : [])] });
+  save(); toast(send ? 'Ticket enviado a despacho' : 'Ticket guardado'); ui.view = 'mis'; render();
+};
+FORM.tkout = f => {
+  const r = S.tk.find(x => x.id === f.dataset.id); if (!r) return; const outs = [];
+  for (let i = 0; i < r.items.length; i++) {
+    const x = r.items[i], v = parseFloat(f['o' + i].value), sp = S.stock.find(p => p.id === x.pid);
+    if (!(v >= 0)) return toast('Revisa las cantidades a despachar');
+    if (sp && v > sp.qty - stReserved(sp.id)) return toast('No hay suficiente disponible de ' + x.name + ' (disponible: ' + nq(sp.qty - stReserved(sp.id)) + ')');
+    outs.push(v);
+  }
+  r.items.forEach((x, i) => { x.out = outs[i]; }); r.state = 'salida'; r.salidaTs = Date.now(); tkLog(r, 'Salida para el cliente marcada (aún sin descontar del almacén)');
+  save(); closeModal(); toast('Salida marcada: enviada a verificación'); render();
+};
+FORM.stockadd = f => {
+  const n = f.n.value.trim(), q = parseFloat(f.q.value); if (!n || !(q >= 0)) return toast('Escribe el producto y la cantidad');
+  if (S.stock.some(p => p.name.toLowerCase() === n.toLowerCase() && p.unit === f.u.value)) return toast('Ese producto ya existe: edita su existencia');
+  S.stock.push({ id: uid(), name: n, unit: f.u.value, qty: q, upd: Date.now(), by: dn(cur()) }); save(); toast('Producto agregado'); render();
+};
+FORM.stockedit = f => {
+  const p = S.stock.find(x => x.id === f.dataset.id); if (!p) return; const n = f.n.value.trim(), q = parseFloat(f.q.value);
+  if (!n || !(q >= 0)) return toast('Revisa el nombre y la cantidad');
+  if (S.stock.some(x => x.id !== p.id && x.name.toLowerCase() === n.toLowerCase() && x.unit === p.unit)) return toast('Ya existe otro producto con ese nombre');
+  p.name = n; p.qty = q; p.upd = Date.now(); p.by = dn(cur()); save(); closeModal(); toast('Producto actualizado'); render();
+};
+Object.assign(ACT, {
+  tkaddrow: () => { const box = $('#tkrows'), n = box.children.length; if (n >= 10) return toast('Máximo 10 productos por ticket'); box.insertAdjacentHTML('beforeend', tkRowHtml(n)); },
+  tksave: t => { const f = $('#tkform'); f.dataset.send = t.dataset.send; submitForm(f); },
+  tksend: t => askConfirm('¿Enviar este ticket a despacho (Leovanny)?', () => { const r = S.tk.find(x => x.id === t.dataset.id); if (!r) return; r.state = 'enviado'; r.sent = Date.now(); tkLog(r, 'Enviado a despacho'); save(); toast('Enviado a despacho'); render(); }, 'Enviar'),
+  tkout: t => {
+    const r = S.tk.find(x => x.id === t.dataset.id); if (!r) return;
+    openModal(`<div class="modal"><form data-form="tkout" data-id="${r.id}"><div class="modal-h"><h2 style="margin:0">Salida para el cliente</h2></div><div class="modal-b stack"><div class="muted">${esc(r.cliente)} · ${esc(r.no)}. Marca lo que realmente sale. El sistema <b>todavía no descuenta</b>: el descuento lo hace almacén con la salida definitiva.</div>${r.items.map((x, i) => { const sp = S.stock.find(p => p.id === x.pid); return `<label>${esc(x.name)} — pedido: ${nq(x.qty)} ${uTxt(x.unit)}${sp ? ' · disponible: ' + nq(sp.qty - stReserved(sp.id)) : ''}<input name="o${i}" type="number" min="0" step="any" value="${x.out != null ? x.out : x.qty}" required></label>`; }).join('')}</div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Marcar salida y enviar a verificación</button></div></form></div>`);
+  },
+  tkver: t => askConfirm('¿Confirmar el pedido y darle el cierre total? Pasará a almacén.', () => { const r = S.tk.find(x => x.id === t.dataset.id); if (!r) return; r.state = 'confirmado'; r.verTs = Date.now(); tkLog(r, 'Pedido verificado y confirmado (cierre total)'); save(); toast('Pedido confirmado'); render(); }, 'Confirmar'),
+  tkalm: t => {
+    const r = S.tk.find(x => x.id === t.dataset.id); if (!r) return;
+    askConfirm('¿Dar la salida definitiva del almacén? Esto descuenta los productos de la existencia.', () => {
+      for (const x of r.items) { const sp = S.stock.find(p => p.id === x.pid); if (!sp) return toast('El producto ' + x.name + ' ya no existe en el almacén'); if (sp.qty < +x.out) return toast('Existencia insuficiente de ' + x.name + ' (hay ' + nq(sp.qty) + ')'); }
+      r.items.forEach(x => { const sp = S.stock.find(p => p.id === x.pid); sp.qty = Math.round((sp.qty - (+x.out || 0)) * 1000) / 1000; sp.upd = Date.now(); });
+      r.state = 'despachado'; r.outTs = Date.now(); tkLog(r, 'Salida del almacén: existencia descontada'); save(); toast('Salida registrada: existencia descontada'); render();
+    }, 'Dar salida');
+  },
+  tkcob: t => askConfirm('¿Enviar este ticket a cobranza?', () => { const r = S.tk.find(x => x.id === t.dataset.id); if (!r) return; r.state = 'cobranza'; r.cobTs = Date.now(); tkLog(r, 'Enviado a cobranza'); save(); toast('Enviado a cobranza'); render(); }, 'Enviar'),
+  tkview: t => {
+    const r = S.tk.find(x => x.id === t.dataset.id); if (!r) return;
+    openModal(`<div class="modal wide"><div class="modal-h"><h2 style="margin:0">Ticket ${esc(r.no)}</h2>${tkP(r.state)}</div><div class="modal-b stack"><div class="grid2"><div><div class="small">Cliente</div><b>${esc(r.cliente)}</b></div><div><div class="small">Tipo de cliente</div>${esc(r.tipo) || '—'}</div></div><div class="grid2"><div><div class="small">Creado por</div>${esc(r.uname)}</div><div><div class="small">Fecha</div>${fmt(r.ts)}</div></div><div class="tw"><table><thead><tr><th>Producto</th><th>Solicitado</th><th>A despachar</th></tr></thead><tbody>${r.items.map(x => `<tr><td>${esc(x.name)}</td><td>${nq(x.qty)} ${uTxt(x.unit)}</td><td>${x.out != null ? nq(x.out) + ' ' + uTxt(x.unit) : '—'}</td></tr>`).join('')}</tbody></table></div>${r.nota ? `<div><div class="small">Observaciones</div><div style="white-space:pre-wrap">${esc(r.nota)}</div></div>` : ''}<div><div class="small">Recorrido</div>${(r.hist || []).map(h => `<div class="small">${fmt(h.ts)} · ${esc(h.a)} (${esc(h.by)})</div>`).join('')}</div></div><div class="modal-f"><button class="btn" data-act="close">Cerrar</button><button class="btn primary" data-act="tkpdf" data-id="${r.id}">Descargar</button></div></div>`);
+  },
+  tkpdf: t => { const r = S.tk.find(x => x.id === t.dataset.id); if (r) tkPdf(r); },
+  plpdf: t => { const r = S.mant.find(x => x.id === t.dataset.id); if (r) plPdf(r); },
+  stockedit: t => { const p = S.stock.find(x => x.id === t.dataset.id); if (!p) return; openModal(`<div class="modal" style="max-width:420px"><form data-form="stockedit" data-id="${p.id}"><div class="modal-h"><h2 style="margin:0">Editar producto</h2></div><div class="modal-b stack"><label>Nombre<input name="n" value="${esc(p.name)}" required></label><label>Existencia (${p.unit === 'kg' ? 'kilos' : 'unidades'})<input name="q" type="number" min="0" step="any" value="${p.qty}" required></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar</button></div></form></div>`); },
+  stockdel: t => askConfirm('¿Eliminar este producto del almacén?', () => { S.stock = S.stock.filter(x => x.id !== t.dataset.id); save(); render(); }, 'Eliminar'),
+  sigclr: () => { const c = $('#sigcv'); if (c) { c.getContext('2d').clearRect(0, 0, c.width, c.height); SIGHAS = false; } },
+  sigsave: () => { const c = $('#sigcv'), u = cur(); if (!c || !SIGHAS) return toast('Dibuja tu firma primero'); S.firmas = [{ id: u.id, img: c.toDataURL('image/png'), ts: Date.now() }]; SIGHAS = false; save(); toast('Firma guardada'); render(); },
+  sigdel: () => askConfirm('¿Eliminar tu firma guardada?', () => { S.firmas = []; save(); render(); }, 'Eliminar'),
+  gcob: t => {
+    const r = S.mant.find(x => x.id === t.dataset.id); if (!r || needFirma()) return;
+    askPass('Firmar y enviar a cobranza', () => { const s = myFirma(); r.pedido = r.pedido || {}; r.pedido.firmaGer = s; r.state = 'cobranza'; r.cobTs = r.upd = Date.now(); r.cobBy = dn(cur()); save(); toast('Firmada y enviada a cobranza'); render(); });
+  }
+});
 
 /* Planilla F03-M05 · Solicitud de pedido */
 function plHtml(r, ro) {
@@ -1473,7 +1693,8 @@ function plHtml(r, ro) {
   <div style="overflow-x:auto"><table><thead><tr><th>Ítem</th><th>5. Descripción del requerimiento</th><th>6. Cantidad</th><th>7. Unidad de Medida</th></tr></thead><tbody>${Array.from({ length: 10 }, (_, i) => `<tr><td class="n">${i + 1}</td><td>${t('d' + (i + 1), (it[i] || {}).desc)}</td><td style="width:90px">${t('c' + (i + 1), (it[i] || {}).cant)}</td><td style="width:130px">${t('u' + (i + 1), (it[i] || {}).um)}</td></tr>`).join('')}</tbody></table></div>
   <label>8. Observaciones a la Solicitud<textarea name="obs" rows="2" ${d}>${esc(p.obs || '')}</textarea></label>
   <div class="sec" style="text-align:left">9. Validación del Solicitante: Responsable de la Unidad Solicitante</div>
-  <div class="r2"><label>Nombre y Apellido${t('nombre', p.nombre)}</label><label>Cargo${t('cargo', p.cargo)}</label></div><div class="firma">Firma</div>
+  <div class="r2"><label>Nombre y Apellido${t('nombre', p.nombre)}</label><label>Cargo${t('cargo', p.cargo)}</label></div><div class="firma" style="height:auto;min-height:30px">${p.firmaSup ? sigImg(p.firmaSup) : 'Firma'}</div>
+  <div class="sec" style="text-align:left">Aprobación: Gerente de Mantenimiento</div><div class="firma" style="height:auto;min-height:30px">${p.firmaGer ? sigImg(p.firmaGer) : 'Firma del gerente (se estampa al enviar a cobranza)'}</div>
   <div class="ger"><div class="sec">PARA SER LLENADO POR LA GERENCIA DE ADMINISTRACIÓN Y FINANZAS</div><div class="r2">${g}</div><div class="r2"><label>13. Validado por: Nombre y Apellido<input disabled></label><label>Cargo<input disabled></label></div><div class="firma">Firma</div><div class="chk" style="flex-wrap:wrap"><b style="font-size:12px">14. Instrucciones:</b>${['Procesar', 'Mantener en espera', 'Devolver al solicitante', 'No procesar'].map(x => `<label><input type="checkbox" disabled>${x}</label>`).join('')}</div><label>15. Otras indicaciones<textarea rows="2" disabled></textarea></label><div class="r2"><label>RECIBIDO<input disabled></label><label>FECHA<input disabled></label></div></div></div>`;
 }
 const plSet = (f, d) => {
@@ -1541,6 +1762,10 @@ function nItems() {
   if (u.role !== 'admin') S.ti.filter(r => r.uid === u.id).forEach(r => { if (r.seen) o.push(['tv|' + r.id, 'TI vio tu solicitud', r.cat]); if (r.state === 'proceso') o.push(['tp|' + r.id, 'TI está atendiendo tu solicitud', r.cat]); if (r.tiDone && !r.userDone) o.push(['tt|' + r.id, 'TI terminó tu solicitud: confírmala', r.cat]); if (r.state === 'incompleta') o.push(['ti|' + r.id + 'i', 'Tu solicitud de TI quedó pendiente', r.cat]); });
   if (u.role === 'gerente_mant') S.mant.filter(r => r.state === 'gerente').forEach(r => o.push(['mg|' + r.id, 'Nueva solicitud de pedido de ' + unm(r), r.place]));
   if (SUP[u.role]) S.mant.filter(r => r.state === 'contaduria' && (r.uid === u.id || (r.area || 'infra') === (u.role === 'sup_auto' ? 'auto' : 'infra'))).forEach(r => o.push(['mc|' + r.id, 'Solicitud de pedido aceptada: por pasar a contaduría', r.place]));
+  if (u.role === 'tk_desp') S.tk.filter(r => r.state === 'enviado').forEach(r => o.push(['td|' + r.id, 'Nuevo ticket de ' + r.cliente, r.no]));
+  if (u.role === 'tk_ver') S.tk.filter(r => r.state === 'salida').forEach(r => o.push(['tv|' + r.id, 'Ticket por verificar: ' + r.cliente, r.no]));
+  if (u.role === 'tk_alm') S.tk.filter(r => r.state === 'confirmado').forEach(r => o.push(['ta|' + r.id, 'Pedido confirmado: da la salida del almacén', r.cliente + ' · ' + r.no]));
+  if (u.role === 'cobranza') { S.tk.filter(r => r.state === 'cobranza').forEach(r => o.push(['tc|' + r.id, 'Nuevo ticket en cobranza', r.cliente + ' · ' + r.no])); S.mant.filter(r => r.state === 'cobranza').forEach(r => o.push(['mq|' + r.id, 'Solicitud de pedido firmada recibida', r.place])); }
   if (u.role === 'admin') S.msgs.forEach(m => o.push(['msg|' + m.id, 'Nuevo mensaje de ' + m.uname, m.subject || '']));
   if (u.role === 'admin_ti') S.ti.filter(r => r.state === 'pendiente').forEach(r => o.push(['ti|' + r.id, 'Nueva solicitud TI de ' + r.uname, r.cat + (r.dept ? ' · ' + r.dept : '')]));
   if (u.role === 'sup_infra') S.mant.filter(r => r.state === 'enviada' && !r.rrole && (r.area || 'infra') === 'infra').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
@@ -1580,7 +1805,7 @@ async function liveRefresh() {
   if (!u || (u.role === 'admin' && ui.view === 'subir')) return;
   const typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
   try { await chain; await loadAll(); notifyScan(); } catch (e) { return; }
-  const live = u.role === 'admin' ? ['resumen', 'msgs', 'docs'].includes(ui.view) : u.role === 'user' ? (ui.uview.startsWith('folder') || ['desk', 'lib', 'ti', 'mant', 'mail'].includes(ui.uview)) : ui.view !== 'cuenta';
+  const live = u.role === 'admin' ? ['resumen', 'msgs', 'docs'].includes(ui.view) : u.role === 'user' ? (ui.uview.startsWith('folder') || ['desk', 'lib', 'ti', 'mant', 'mail'].includes(ui.uview)) : !['cuenta', 'nuevo'].includes(ui.view);
   if (!typing && live && !$('#modal').innerHTML) render();
 }
 function rtStart() {
