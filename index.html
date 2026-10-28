@@ -385,7 +385,7 @@ const canAccess = (d, u) => d.status === 'active' && !S.lockdown && effective(d,
 const workers = () => S.users.filter(u => u.role !== 'admin');
 const canDl = d => d.download !== false; // documentos anteriores (sin valor) conservan la descarga permitida
 /* Roles que también son usuarios de biblioteca: el administrador les gestiona permisos y descarga como a un usuario normal */
-const LIBROLES = ['user', 'tk_crea', 'tk_desp', 'tk_ver', 'tk_alm'];
+const LIBROLES = ['user', 'tk_crea', 'tk_desp', 'tk_ver', 'tk_alm', 'cobranza'];
 const userDl = u => !LIBROLES.includes(u.role) || u.download !== false; // interruptor de descarga por usuario
 function dlScope(d) {
   const who = workers().filter(u => effective(d, u));
