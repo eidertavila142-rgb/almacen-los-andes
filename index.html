@@ -1315,7 +1315,7 @@ const ST_CFG = {
   }
 };
 const tkItemsMulti = r => (r.items || []).map(x => [x.name + ' (' + uTxt(x.unit) + ')', 1]);
-const tkQtyMulti = r => (r.items || []).map(x => [x.name + ' (' + uTxt(x.unit) + ')', +(x.out != null ? x.out : x.qty) || 0]);
+const tkQtyMulti = r => r.state === 'cancelado' ? [] : (r.items || []).map(x => [x.name + ' (' + uTxt(x.unit) + ')', +(x.out != null ? x.out : x.qty) || 0]);
 const tkAn = () => ({
   date: { t: 'Tickets por fecha', kind: 'date', cts: CT_DATE },
   cliente: { t: 'Clientes que más piden', kind: 'count', fn: r => r.cliente || 'Sin nombre', limit: 15, first: 'Cliente', cnt: 'Tickets', cts: ['hbar', 'bar', 'pie', 'doughnut'] },
@@ -1323,18 +1323,19 @@ const tkAn = () => ({
   prod: { t: 'Productos más pedidos (n.º de tickets)', kind: 'count', multi: tkItemsMulti, limit: 15, first: 'Producto', cnt: 'Tickets', cts: CT_SINGLE },
   cant: { t: 'Cantidad despachada por producto', kind: 'count', multi: tkQtyMulti, limit: 15, first: 'Producto', cnt: 'Cantidad', noPct: true, cts: CT_SINGLE }
 });
-const tkCols = [['N.º ticket', 16], ['Fecha y hora', 18], ['Cliente', 26], ['Tipo de cliente', 18], ['Creado por', 18], ['Productos', 50], ['Estado', 20], ['Enviado a despacho', 18], ['Salida para el cliente', 18], ['Confirmado', 18], ['Salida del almacén', 18], ['Enviado a cobranza', 18]];
-const tkRow = (r, u) => [r.no, stD(r.ts), r.cliente, r.tipo || '', r.uname, tkLines(r), (TKS[r.state] || [r.state])[0], stD(r.sent), stD(r.salidaTs), stD(r.verTs), stD(r.outTs), stD(r.cobTs)];
+const tkCols = [['N.º ticket', 16], ['Fecha y hora', 18], ['Cliente', 26], ['Tipo de cliente', 18], ['Creado por', 18], ['Productos', 50], ['Estado', 20], ['Enviado a despacho', 18], ['Salida para el cliente', 18], ['Confirmado', 18], ['Salida del almacén', 18], ['Enviado a cobranza', 18], ['Cancelado', 18], ['Motivo de cancelación', 45]];
+const tkRow = (r, u) => [r.no, stD(r.ts), r.cliente, r.tipo || '', r.uname, tkLines(r), (TKS[r.state] || [r.state])[0], stD(r.sent), stD(r.salidaTs), stD(r.verTs), stD(r.outTs), stD(r.cobTs), stD(r.cancelTs), r.cancelMotivo || ''];
 const tkFlt = () => [['f1', 'Todos los tipos de cliente', () => [...new Set(S.tk.map(r => r.tipo || 'Sin tipo'))], r => r.tipo || 'Sin tipo'], ['f2', 'Todos los productos', () => [...new Set(S.tk.flatMap(r => (r.items || []).map(x => x.name)))], r => (r.items || []).map(x => x.name)]];
-ST_CFG.alm = { name: 'tickets de despacho', file: 'tickets-almacen', def: 'cliente', nodept: true, note: 'Registro de los últimos 3 meses (tickets con salida del almacén).', topLbl: 'Cliente que más pide', topFn: r => r.cliente || 'Sin nombre', k2: { lbl: 'Producto más pedido', multi: tkItemsMulti },
-  rows: () => S.tk.filter(r => ['despachado', 'cobranza'].includes(r.state) && r.ts >= Date.now() - 92 * 864e5), flt: tkFlt(), an: tkAn(), cols: tkCols, dateCols: [2, 8, 9, 10, 11, 12], descCol: 6, row: tkRow };
+ST_CFG.alm = { name: 'tickets de despacho', file: 'tickets-almacen', def: 'cliente', nodept: true, note: 'Registro de los últimos 3 meses (despachados y cancelados). Usa el filtro "Pedidos cancelados" para ver el motivo de cada uno.', topLbl: 'Cliente que más pide', topFn: r => r.cliente || 'Sin nombre', k2: { lbl: 'Producto más pedido', multi: tkItemsMulti },
+  rows: () => S.tk.filter(r => ['despachado', 'cobranza', 'cancelado'].includes(r.state) && r.ts >= Date.now() - 92 * 864e5), flt: [...tkFlt(), ['f3', 'Despachados y cancelados', () => ['Pedidos despachados', 'Pedidos cancelados'], r => r.state === 'cancelado' ? 'Pedidos cancelados' : 'Pedidos despachados']], an: tkAn(), cols: tkCols, dateCols: [2, 8, 9, 10, 11, 12, 13], descCol: 6, row: tkRow,
+  detail: c => c.s.f3 === 'Pedidos cancelados' ? `<h2>Pedidos cancelados y su motivo</h2><div class="tw"><table><thead><tr><th>N.º</th><th>Fecha</th><th>Cliente</th><th>Motivo</th></tr></thead><tbody>${c.rs.filter(r => r.state === 'cancelado').map(r => `<tr><td>${esc(r.no)}</td><td>${fmt(r.cancelTs || r.ts)}</td><td><b>${esc(r.cliente)}</b></td><td style="white-space:pre-wrap">${esc(r.cancelMotivo)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No hay pedidos cancelados en este período.</td></tr>'}</tbody></table></div>` : '' };
 ST_CFG.cob = { name: 'tickets de cobranza', file: 'tickets-cobranza', def: 'cliente', nodept: true, note: 'Tickets que ya recibiste en cobranza.', topLbl: 'Cliente que más pide', topFn: r => r.cliente || 'Sin nombre', k2: { lbl: 'Producto más pedido', multi: tkItemsMulti },
-  rows: () => S.tk.filter(r => r.state === 'cobranza'), flt: tkFlt(), an: tkAn(), cols: tkCols, dateCols: [2, 8, 9, 10, 11, 12], descCol: 6, row: tkRow };
+  rows: () => S.tk.filter(r => r.state === 'cobranza'), flt: tkFlt(), an: tkAn(), cols: tkCols, dateCols: [2, 8, 9, 10, 11, 12, 13], descCol: 6, row: tkRow };
 const STROLES = ['admin_ti', 'sup_auto', 'sup_infra', 'tk_alm', 'cobranza'];
 const stM = () => ST_CFG[({ admin_ti: 'ti', tk_alm: 'alm', cobranza: 'cob' })[cur().role] || 'mant'];
 const CHART_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', XLS_URL = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
 let TICH = null, ST_ANIM = true; const LIBP = {};
-const stS = () => (ui.st = Object.assign({ an: '', ct: 'bar', grp: 'day', from: '', to: '', dept: '', f1: '', f2: '' }, ui.st));
+const stS = () => (ui.st = Object.assign({ an: '', ct: 'bar', grp: 'day', from: '', to: '', dept: '', f1: '', f2: '', f3: '' }, ui.st));
 const fIso = x => new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const fDMY = s => s ? s.split('-').reverse().join('/') : '';
 function loadLib(url, g) {
@@ -1424,7 +1425,7 @@ function tiStats() {
     <div class="row" style="flex-wrap:wrap"><span class="muted">Tipo de gráfico:</span>${c.sp.cts.map(k => `<button class="btn sm ${s.ct === k ? 'primary' : ''}" data-act="stct" data-c="${k}">${ST_CT[k]}</button>`).join('')}</div>
     ${c.total ? `<div id="stCvBox" style="position:relative;height:380px"><canvas id="stCv"></canvas></div>` : '<div class="empty">No hay registros con estos filtros.</div>'}
   </div>
-  ${c.total ? `<h2>Detalle</h2>${tbl}` : ''}`;
+  ${c.total ? `<h2>Detalle</h2>${tbl}` : ''}${M.detail ? M.detail(c) : ''}`;
 }
 async function stImage(c) {
   await loadLib(CHART_URL, 'Chart');
@@ -1466,7 +1467,7 @@ async function stXls() {
 }
 Object.assign(ACT, {
   stct: t => { stS().ct = t.dataset.c; ST_ANIM = true; render(); },
-  stclr: () => { const s = stS(); s.from = s.to = s.dept = s.f1 = s.f2 = ''; ST_ANIM = true; render(); },
+  stclr: () => { const s = stS(); s.from = s.to = s.dept = s.f1 = s.f2 = s.f3 = ''; ST_ANIM = true; render(); },
   stpre: t => {
     const s = stS(), d = t.dataset.d, now = new Date();
     if (d === 'all') s.from = s.to = ''; else if (d === 'today') s.from = s.to = fIso(now);
@@ -1480,7 +1481,7 @@ Object.assign(CHG, { stf: t => { stS()[t.dataset.k] = t.value; ST_ANIM = true; r
 
 /* ============ Módulo 4: Tickets de despacho (Dailyn → Leovanny → Osmerly → Yorgely → Cobranza) ============ */
 const TKR = { tk_crea: 'Atención al cliente', tk_desp: 'Despacho', tk_ver: 'Verificación', tk_alm: 'Almacén', cobranza: 'Cobranza' };
-const TKS = { nuevo: ['Sin enviar', 'gray'], enviado: ['En despacho', 'warn'], salida: ['Por verificar', 'warn'], confirmado: ['Confirmado', ''], despachado: ['Salió del almacén', 'ok'], cobranza: ['En cobranza', 'ok'] };
+const TKS = { nuevo: ['Sin enviar', 'gray'], enviado: ['En despacho', 'warn'], salida: ['Por verificar', 'warn'], confirmado: ['Confirmado', ''], despachado: ['Salió del almacén', 'ok'], cobranza: ['En cobranza', 'ok'], cancelado: ['Cancelado', 'danger'] };
 const tkP = s => { const x = TKS[s] || [s, 'gray']; return `<span class="pill ${x[1]}">${x[0]}</span>`; };
 const tkNo = () => { const d = new Date(); return 'T-' + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(); };
 const nq = n => (+n || 0).toLocaleString('es', { maximumFractionDigits: 2 });
@@ -1500,14 +1501,14 @@ const TKF = {
   tk_crea: { mis: r => r.uid === cur().id },
   tk_desp: { por: r => r.state === 'enviado', hec: r => ['salida', 'confirmado', 'despachado', 'cobranza'].includes(r.state), rep: r => r.state !== 'nuevo' },
   tk_ver: { por: r => r.state === 'salida', hec: r => ['confirmado', 'despachado', 'cobranza'].includes(r.state) },
-  tk_alm: { por: r => r.state === 'confirmado', cob: r => r.state === 'despachado', hec: r => r.state === 'cobranza' },
+  tk_alm: { por: r => r.state === 'confirmado', cob: r => r.state === 'despachado', hec: r => ['cobranza', 'cancelado'].includes(r.state) },
   cobranza: { tk: r => r.state === 'cobranza' }
 };
 const TKT = {
   mis: ['Mis tickets', 'Tickets que creaste. Envía a despacho los que estén sin enviar.'],
   por: { tk_desp: ['Por despachar', 'Tickets que te envió atención al cliente. Revisa que estén listos y marca la <b>salida para el cliente</b>: el sistema aún no descuenta del almacén.'], tk_ver: ['Por verificar', 'Compara lo que se pidió con lo que despacho marcó y, si está correcto, da el <b>cierre total</b>.'], tk_alm: ['Por dar salida', 'Pedidos confirmados. Al marcar <b>Salida del almacén</b> el sistema descuenta la existencia.'] },
   cob: ['Por enviar a cobranza', 'Pedidos que ya salieron del almacén. Envía el documento a cobranza.'],
-  hec: { tk_desp: ['Con salida marcada', 'Tickets en los que ya marcaste la salida para el cliente.'], tk_ver: ['Confirmados', 'Tickets que ya cerraste.'], tk_alm: ['Historial', 'Tickets que ya enviaste a cobranza.'] },
+  hec: { tk_desp: ['Con salida marcada', 'Tickets en los que ya marcaste la salida para el cliente.'], tk_ver: ['Confirmados', 'Tickets que ya cerraste.'], tk_alm: ['Historial', 'Tickets que ya enviaste a cobranza y pedidos cancelados.'] },
   rep: ['Repertorio de tickets', 'Todos los tickets generados.'],
   tk: ['Tickets recibidos', 'Tickets finales que llegaron a cobranza. Puedes descargarlos.']
 };
@@ -1520,9 +1521,9 @@ function tkCard(r, role) {
   const acts = (role === 'tk_crea' && r.state === 'nuevo' ? b('tksend', 'Enviar a despacho', 'primary') : '')
     + (role === 'tk_desp' && r.state === 'enviado' ? b('tkout', 'Salida para el cliente', 'primary') : '')
     + (role === 'tk_ver' && r.state === 'salida' ? b('tkver', 'Confirmar pedido (cierre total)', 'primary') : '')
-    + (role === 'tk_alm' && r.state === 'confirmado' ? b('tkalm', 'Salida del almacén', 'primary') : '')
+    + (role === 'tk_alm' && r.state === 'confirmado' ? b('tkalm', 'Salida del almacén', 'primary') + b('tkcancel', 'Cancelar pedido', 'danger') : '')
     + (role === 'tk_alm' && r.state === 'despachado' ? b('tkcob', 'Enviar a cobranza', 'primary') : '');
-  return `<div class="panel stack"><div class="between"><div><b>${esc(r.cliente)}</b><div class="small">${esc(r.no)} · ${esc(r.tipo || 'Sin tipo de cliente')} · ${esc(r.uname)}</div></div>${tkP(r.state)}</div>${lines}${r.nota ? `<div class="muted" style="font-size:13px;white-space:pre-wrap">${esc(r.nota)}</div>` : ''}<div class="muted" style="font-size:13px">${fmt(r.ts)}</div><div class="row" style="flex-wrap:wrap">${b('tkview', 'Ver')}${b('tkpdf', 'Descargar')}${acts}</div></div>`;
+  return `<div class="panel stack"><div class="between"><div><b>${esc(r.cliente)}</b><div class="small">${esc(r.no)} · ${esc(r.tipo || 'Sin tipo de cliente')} · ${esc(r.uname)}</div></div>${tkP(r.state)}</div>${lines}${r.nota ? `<div class="muted" style="font-size:13px;white-space:pre-wrap">${esc(r.nota)}</div>` : ''}${r.state === 'cancelado' ? `<div style="font-size:13px;white-space:pre-wrap"><b>Motivo de cancelación:</b> ${esc(r.cancelMotivo)}</div>` : ''}<div class="muted" style="font-size:13px">${fmt(r.ts)}</div><div class="row" style="flex-wrap:wrap">${b('tkview', 'Ver')}${b('tkpdf', 'Descargar')}${acts}</div></div>`;
 }
 const tkGrid = (rs, role, empty) => rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(r => tkCard(r, role)).join('')}</div>` : `<div class="tw"><div class="empty">${empty}</div></div>`;
 
@@ -1568,7 +1569,7 @@ async function tkPdf(r) {
   d.setFontSize(12); d.text('TICKET DE DESPACHO  ' + r.no, m, y); y += 4; d.setDrawColor(200, 36, 27); d.setLineWidth(.8); d.line(m, y, W - m, y); y += 8;
   d.setFontSize(10);
   const kv = (k, v) => { d.setFont('helvetica', 'bold'); d.text(k, m, y); d.setFont('helvetica', 'normal'); const t = d.splitTextToSize(String(v || '-'), W - m * 2 - 38); d.text(t, m + 38, y); y += 5.5 * t.length; };
-  kv('Fecha:', fp(r.ts)); kv('Cliente:', r.cliente); kv('Tipo de cliente:', r.tipo); kv('Creado por:', r.uname); kv('Estado:', (TKS[r.state] || [r.state])[0]); if (r.nota) kv('Observaciones:', r.nota);
+  kv('Fecha:', fp(r.ts)); kv('Cliente:', r.cliente); kv('Tipo de cliente:', r.tipo); kv('Creado por:', r.uname); kv('Estado:', (TKS[r.state] || [r.state])[0]); if (r.nota) kv('Observaciones:', r.nota); if (r.state === 'cancelado') kv('Motivo cancelación:', r.cancelMotivo);
   y += 4; d.setFont('helvetica', 'bold'); d.setFillColor(200, 36, 27); d.rect(m, y - 5, W - 2 * m, 7.5, 'F'); d.setTextColor(255, 255, 255); d.text('Producto', m + 2, y); d.text('Solicitado', 120, y); d.text('A despachar', 156, y); d.setTextColor(0, 0, 0); y += 8; d.setFont('helvetica', 'normal');
   (r.items || []).forEach(x => { if (y > 270) { d.addPage(); y = 20; } d.text(String(x.name), m + 2, y); d.text(nq(x.qty) + ' ' + uTxt(x.unit), 120, y); d.text(x.out != null ? nq(x.out) + ' ' + uTxt(x.unit) : '-', 156, y); d.setDrawColor(220, 220, 220); d.setLineWidth(.2); d.line(m, y + 2, W - m, y + 2); y += 7; });
   y += 5; if (y > 265) { d.addPage(); y = 20; } d.setFont('helvetica', 'bold'); d.text('Recorrido del ticket', m, y); y += 6; d.setFont('helvetica', 'normal');
@@ -1595,7 +1596,10 @@ async function plPdf(r) {
 
 /* ---- Firma digital (se registra en Mi cuenta y se estampa pidiendo la contraseña) ---- */
 const sigImg = s => `<img src="${s.img}" alt="Firma" style="height:46px;background:#fff;border-radius:4px;padding:2px"> <span class="small">${esc(s.name)} · ${fp(s.ts)}</span>`;
-const sigPanel = () => { const f = S.firmas.find(x => x.id === cur().id); return `<div class="panel stack" style="max-width:480px;margin-top:14px"><h3 style="margin:0">Mi firma digital</h3><div class="muted">Dibuja tu firma con el dedo o el mouse. Se estampa en las solicitudes de pedido cuando las firmas y confirmas con tu contraseña.</div>${f ? `<div><div class="small">Firma guardada:</div><img src="${f.img}" alt="" style="max-width:300px;background:#fff;border:1px solid var(--line);border-radius:8px"></div>` : ''}<canvas id="sigcv" width="440" height="160" style="background:#fff;border:1px dashed var(--muted);border-radius:8px;touch-action:none;max-width:100%;cursor:crosshair"></canvas><div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sigclr">Borrar trazo</button><button class="btn sm primary" data-act="sigsave">Guardar firma</button>${f ? '<button class="btn sm danger" data-act="sigdel">Eliminar firma guardada</button>' : ''}</div></div>`; };
+const sigPanel = () => {
+  const f = S.firmas.find(x => x.id === cur().id), edit = !f || ui.sigEdit;
+  return `<div class="panel stack" style="max-width:480px;margin-top:14px"><h3 style="margin:0">Mi firma digital</h3>${f ? `<div><span class="pill ok">Firma registrada</span> <span class="small">${fp(f.ts)}</span></div><img src="${f.img}" alt="Firma" style="max-width:300px;background:#fff;border:1px solid var(--line);border-radius:8px">` : '<div class="muted">Dibuja tu firma con el dedo o el mouse. Se estampa en las solicitudes de pedido cuando las firmas y confirmas con tu contraseña.</div>'}${edit ? `<canvas id="sigcv" width="440" height="160" style="background:#fff;border:1px dashed var(--muted);border-radius:8px;touch-action:none;max-width:100%;cursor:crosshair"></canvas><div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sigclr">Borrar trazo</button><button class="btn sm primary" data-act="sigsave">Guardar firma</button>${f ? '<button class="btn sm" data-act="sigcancel">Cancelar cambio</button>' : ''}</div>` : '<div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sigedit">Cambiar firma</button><button class="btn sm danger" data-act="sigdel">Eliminar firma</button></div>'}</div>`;
+};
 let SIGD = false, SIGHAS = false, SIGNCB = null;
 const sigPt = (e, c) => { const b = c.getBoundingClientRect(); return [(e.clientX - b.left) * c.width / b.width, (e.clientY - b.top) * c.height / b.height]; };
 document.addEventListener('pointerdown', e => { if (e.target.id !== 'sigcv') return; SIGD = true; const c = e.target, p = sigPt(e, c), x = c.getContext('2d'); x.lineWidth = 2.4; x.lineCap = x.lineJoin = 'round'; x.strokeStyle = '#111'; x.beginPath(); x.moveTo(p[0], p[1]); x.lineTo(p[0] + .1, p[1] + .1); x.stroke(); SIGHAS = true; e.preventDefault(); });
@@ -1634,6 +1638,10 @@ FORM.tkout = f => {
   r.items.forEach((x, i) => { x.out = outs[i]; }); r.state = 'salida'; r.salidaTs = Date.now(); tkLog(r, 'Salida para el cliente marcada (aún sin descontar del almacén)');
   save(); closeModal(); toast('Salida marcada: enviada a verificación'); render();
 };
+FORM.tkcancel = f => {
+  const r = S.tk.find(x => x.id === f.dataset.id); if (!r || r.state !== 'confirmado') return; const m = f.m.value.trim(); if (!m) return toast('Escribe el motivo de la cancelación');
+  r.state = 'cancelado'; r.cancelMotivo = m; r.cancelTs = Date.now(); r.cancelBy = dn(cur()); tkLog(r, 'Pedido cancelado: ' + m); save(); closeModal(); toast('Pedido cancelado'); render();
+};
 FORM.stockadd = f => {
   const n = f.n.value.trim(), q = parseFloat(f.q.value); if (!n || !(q >= 0)) return toast('Escribe el producto y la cantidad');
   if (S.stock.some(p => p.name.toLowerCase() === n.toLowerCase() && p.unit === f.u.value)) return toast('Ese producto ya existe: edita su existencia');
@@ -1662,17 +1670,23 @@ Object.assign(ACT, {
       r.state = 'despachado'; r.outTs = Date.now(); tkLog(r, 'Salida del almacén: existencia descontada'); save(); toast('Salida registrada: existencia descontada'); render();
     }, 'Dar salida');
   },
+  tkcancel: t => {
+    const r = S.tk.find(x => x.id === t.dataset.id); if (!r) return;
+    openModal(`<div class="modal" style="max-width:480px"><form data-form="tkcancel" data-id="${r.id}"><div class="modal-h"><h2 style="margin:0">Cancelar pedido</h2></div><div class="modal-b stack"><div class="muted">${esc(r.cliente)} · ${esc(r.no)}. El pedido no sale del almacén y deja de contar como "por salir".</div><label>Motivo de la cancelación<textarea name="m" rows="4" required placeholder="Escribe por qué se cancela el pedido"></textarea></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Volver</button><button class="btn danger">Cancelar pedido</button></div></form></div>`);
+  },
   tkcob: t => askConfirm('¿Enviar este ticket a cobranza?', () => { const r = S.tk.find(x => x.id === t.dataset.id); if (!r) return; r.state = 'cobranza'; r.cobTs = Date.now(); tkLog(r, 'Enviado a cobranza'); save(); toast('Enviado a cobranza'); render(); }, 'Enviar'),
   tkview: t => {
     const r = S.tk.find(x => x.id === t.dataset.id); if (!r) return;
-    openModal(`<div class="modal wide"><div class="modal-h"><h2 style="margin:0">Ticket ${esc(r.no)}</h2>${tkP(r.state)}</div><div class="modal-b stack"><div class="grid2"><div><div class="small">Cliente</div><b>${esc(r.cliente)}</b></div><div><div class="small">Tipo de cliente</div>${esc(r.tipo) || '—'}</div></div><div class="grid2"><div><div class="small">Creado por</div>${esc(r.uname)}</div><div><div class="small">Fecha</div>${fmt(r.ts)}</div></div><div class="tw"><table><thead><tr><th>Producto</th><th>Solicitado</th><th>A despachar</th></tr></thead><tbody>${r.items.map(x => `<tr><td>${esc(x.name)}</td><td>${nq(x.qty)} ${uTxt(x.unit)}</td><td>${x.out != null ? nq(x.out) + ' ' + uTxt(x.unit) : '—'}</td></tr>`).join('')}</tbody></table></div>${r.nota ? `<div><div class="small">Observaciones</div><div style="white-space:pre-wrap">${esc(r.nota)}</div></div>` : ''}<div><div class="small">Recorrido</div>${(r.hist || []).map(h => `<div class="small">${fmt(h.ts)} · ${esc(h.a)} (${esc(h.by)})</div>`).join('')}</div></div><div class="modal-f"><button class="btn" data-act="close">Cerrar</button><button class="btn primary" data-act="tkpdf" data-id="${r.id}">Descargar</button></div></div>`);
+    openModal(`<div class="modal wide"><div class="modal-h"><h2 style="margin:0">Ticket ${esc(r.no)}</h2>${tkP(r.state)}</div><div class="modal-b stack"><div class="grid2"><div><div class="small">Cliente</div><b>${esc(r.cliente)}</b></div><div><div class="small">Tipo de cliente</div>${esc(r.tipo) || '—'}</div></div><div class="grid2"><div><div class="small">Creado por</div>${esc(r.uname)}</div><div><div class="small">Fecha</div>${fmt(r.ts)}</div></div><div class="tw"><table><thead><tr><th>Producto</th><th>Solicitado</th><th>A despachar</th></tr></thead><tbody>${r.items.map(x => `<tr><td>${esc(x.name)}</td><td>${nq(x.qty)} ${uTxt(x.unit)}</td><td>${x.out != null ? nq(x.out) + ' ' + uTxt(x.unit) : '—'}</td></tr>`).join('')}</tbody></table></div>${r.nota ? `<div><div class="small">Observaciones</div><div style="white-space:pre-wrap">${esc(r.nota)}</div></div>` : ''}${r.state === 'cancelado' ? `<div><div class="small">Motivo de cancelación</div><div style="white-space:pre-wrap">${esc(r.cancelMotivo)}</div></div>` : ''}<div><div class="small">Recorrido</div>${(r.hist || []).map(h => `<div class="small">${fmt(h.ts)} · ${esc(h.a)} (${esc(h.by)})</div>`).join('')}</div></div><div class="modal-f"><button class="btn" data-act="close">Cerrar</button><button class="btn primary" data-act="tkpdf" data-id="${r.id}">Descargar</button></div></div>`);
   },
   tkpdf: t => { const r = S.tk.find(x => x.id === t.dataset.id); if (r) tkPdf(r); },
   plpdf: t => { const r = S.mant.find(x => x.id === t.dataset.id); if (r) plPdf(r); },
   stockedit: t => { const p = S.stock.find(x => x.id === t.dataset.id); if (!p) return; openModal(`<div class="modal" style="max-width:420px"><form data-form="stockedit" data-id="${p.id}"><div class="modal-h"><h2 style="margin:0">Editar producto</h2></div><div class="modal-b stack"><label>Nombre<input name="n" value="${esc(p.name)}" required></label><label>Existencia (${p.unit === 'kg' ? 'kilos' : 'unidades'})<input name="q" type="number" min="0" step="any" value="${p.qty}" required></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar</button></div></form></div>`); },
   stockdel: t => askConfirm('¿Eliminar este producto del almacén?', () => { S.stock = S.stock.filter(x => x.id !== t.dataset.id); save(); render(); }, 'Eliminar'),
   sigclr: () => { const c = $('#sigcv'); if (c) { c.getContext('2d').clearRect(0, 0, c.width, c.height); SIGHAS = false; } },
-  sigsave: () => { const c = $('#sigcv'), u = cur(); if (!c || !SIGHAS) return toast('Dibuja tu firma primero'); S.firmas = [{ id: u.id, img: c.toDataURL('image/png'), ts: Date.now() }]; SIGHAS = false; save(); toast('Firma guardada'); render(); },
+  sigsave: () => { const c = $('#sigcv'), u = cur(); if (!c || !SIGHAS) return toast('Dibuja tu firma primero'); S.firmas = [{ id: u.id, img: c.toDataURL('image/png'), ts: Date.now() }]; SIGHAS = false; ui.sigEdit = false; save(); toast('Firma registrada'); render(); },
+  sigedit: () => { ui.sigEdit = true; SIGHAS = false; render(); },
+  sigcancel: () => { ui.sigEdit = false; SIGHAS = false; render(); },
   sigdel: () => askConfirm('¿Eliminar tu firma guardada?', () => { S.firmas = []; save(); render(); }, 'Eliminar'),
   gcob: t => {
     const r = S.mant.find(x => x.id === t.dataset.id); if (!r || needFirma()) return;
