@@ -384,7 +384,9 @@ function effective(d, u) { const p = perm(d, u.id); if (p === 'deny') return fal
 const canAccess = (d, u) => d.status === 'active' && !S.lockdown && effective(d, u);
 const workers = () => S.users.filter(u => u.role !== 'admin');
 const canDl = d => d.download !== false; // documentos anteriores (sin valor) conservan la descarga permitida
-const userDl = u => u.role !== 'user' || u.download !== false; // interruptor de descarga por usuario
+/* Roles que también son usuarios de biblioteca: el administrador les gestiona permisos y descarga como a un usuario normal */
+const LIBROLES = ['user', 'tk_crea', 'tk_desp', 'tk_ver', 'tk_alm'];
+const userDl = u => !LIBROLES.includes(u.role) || u.download !== false; // interruptor de descarga por usuario
 function dlScope(d) {
   const who = workers().filter(u => effective(d, u));
   const blocked = who.filter(u => !userDl(u)).length;
@@ -619,10 +621,10 @@ function vUsers() {
   ${S.users.filter(u => !ui.ucargo || (ui.ucargo === '__none' ? !u.cargo : u.cargo === ui.ucargo)).map(u => { const c = counts(u.id); return `<tr>
     <td><b>${esc(dn(u))}</b><div class="small">C.I. ${esc(u.name)}</div></td><td class="mono">${esc(u.pass)}</td><td>${esc(u.dept) || '<span class="muted">Sin asignar</span>'}</td><td>${esc(u.cargo) || '<span class="muted">Sin cargo</span>'}</td>
     <td><span class="pill ${u.role === 'user' ? 'gray' : ''}">${RL[u.role] || 'Usuario'}</span></td>
-    <td>${u.role !== 'user' ? '<span class="pill gray">—</span>' : `<span class="pill ${userDl(u) ? 'ok' : 'danger'}">${userDl(u) ? 'Activada' : 'Desactivada'}</span>`}</td>
+    <td>${!LIBROLES.includes(u.role) ? '<span class="pill gray">—</span>' : `<span class="pill ${userDl(u) ? 'ok' : 'danger'}">${userDl(u) ? 'Activada' : 'Desactivada'}</span>`}</td>
     <td>${c.o} / ${c.d}</td>
     <td style="white-space:nowrap;text-align:right">
-      ${u.role === 'user' ? `<button class="btn sm" data-act="userperm" data-id="${u.id}">Permisos</button>` : ''}
+      ${LIBROLES.includes(u.role) ? `<button class="btn sm" data-act="userperm" data-id="${u.id}">Permisos</button>` : ''}
       <button class="btn sm" data-act="edituser" data-id="${u.id}">Editar</button>
       ${u.id !== ui.user ? `<button class="btn sm danger" data-act="deluser" data-id="${u.id}">Eliminar</button>` : ''}
     </td></tr>`; }).join('')}</tbody></table></div>`;
