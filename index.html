@@ -1207,8 +1207,8 @@ function viewSup() {
 function viewGer() {
   const u = cur(), v = ui.view, all = S.mant.filter(r => r.pedido && ['gerente', 'contaduria', 'cobranza'].includes(r.state)).sort((a, b) => (b.cobTs || b.sent || b.ts) - (a.cobTs || a.sent || a.ts));
   const q = all.filter(r => r.state === 'gerente'), acc = all.filter(r => r.state === 'contaduria'), cob = all.filter(r => r.state === 'cobranza');
-  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'malm' ? vMalm() : v === 'gcob' ? `<h1>Enviadas a cobranza</h1><p class="sub">Solicitudes de pedido firmadas por ti que ya recibió cobranza.</p>${pgrid(cob, 'ger', 'Aún no has enviado solicitudes a cobranza.')}` : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste. Para enviarlas a cobranza debes <b>firmarlas</b>: sin tu firma no se pueden enviar. Con tu firma guardada basta un clic.</p>${sigAllBtn('gcoball', acc, 'Firmar y enviar todas a cobranza')}${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría. Las <b>compras menores</b> se aprueban con tu firma y pasan directo a cobranza.</p>${sigAllBtn('gcoball', q.filter(r => (r.pedido || {}).menor), 'Firmar y aprobar todas las compras menores')}${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
-  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', acc.length], ['gcob', 'Enviadas a cobranza', 0], ['malm', 'Almacén de mantenimiento', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'malm' ? vMalm() : v === 'stats' ? vG1Stats() : v === 'gcob' ? `<h1>Enviadas a cobranza</h1><p class="sub">Solicitudes de pedido firmadas por ti que ya recibió cobranza.</p>${pgrid(cob, 'ger', 'Aún no has enviado solicitudes a cobranza.')}` : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste. Para enviarlas a cobranza debes <b>firmarlas</b>: sin tu firma no se pueden enviar. Con tu firma guardada basta un clic.</p>${sigAllBtn('gcoball', acc, 'Firmar y enviar todas a cobranza')}${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría. Las <b>compras menores</b> se aprueban con tu firma y pasan directo a cobranza.</p>${sigAllBtn('gcoball', q.filter(r => (r.pedido || {}).menor), 'Firmar y aprobar todas las compras menores')}${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
+  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', acc.length], ['gcob', 'Enviadas a cobranza', 0], ['malm', 'Almacén de mantenimiento', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
 }
 let PNEW = null;
 Object.assign(ACT, {
@@ -1337,8 +1337,8 @@ ST_CFG.alm = { name: 'tickets de despacho', file: 'tickets-almacen', def: 'clien
   detail: c => c.s.f3 === 'Pedidos cancelados' ? `<h2>Pedidos cancelados y su motivo</h2><div class="tw"><table><thead><tr><th>N.º</th><th>Fecha</th><th>Cliente</th><th>Motivo</th></tr></thead><tbody>${c.rs.filter(r => r.state === 'cancelado').map(r => `<tr><td>${esc(r.no)}</td><td>${fmt(r.cancelTs || r.ts)}</td><td><b>${esc(r.cliente)}</b></td><td style="white-space:pre-wrap">${esc(r.cancelMotivo)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No hay pedidos cancelados en este período.</td></tr>'}</tbody></table></div>` : '' };
 ST_CFG.cob = { name: 'tickets de cobranza', file: 'tickets-cobranza', def: 'cliente', nodept: true, note: 'Tickets que ya recibiste en cobranza.', topLbl: 'Cliente que más pide', topFn: r => r.cliente || 'Sin nombre', k2: { lbl: 'Producto más pedido', multi: tkItemsMulti },
   rows: () => S.tk.filter(r => r.state === 'cobranza'), flt: tkFlt(), an: tkAn(), cols: tkCols, dateCols: [2, 8, 9, 10, 11, 12, 13], descCol: 6, row: tkRow };
-const STROLES = ['admin_ti', 'sup_auto', 'sup_infra', 'tk_alm', 'cobranza'];
-const stM = () => ST_CFG[({ admin_ti: 'ti', tk_alm: 'alm', cobranza: 'cob' })[cur().role] || 'mant'];
+const STROLES = ['admin_ti', 'sup_auto', 'sup_infra', 'tk_alm', 'cobranza', 'gerente_mant'];
+const stM = () => ST_CFG[({ admin_ti: 'ti', tk_alm: 'alm', cobranza: 'cob', gerente_mant: 'g1' + (ui.gsub || 's2') })[cur().role] || 'mant'];
 const CHART_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', XLS_URL = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
 let TICH = null, ST_ANIM = true; const LIBP = {};
 const stS = () => (ui.st = Object.assign({ an: '', ct: 'bar', grp: 'day', from: '', to: '', dept: '', f1: '', f2: '', f3: '' }, ui.st));
@@ -1386,8 +1386,8 @@ function stCfg(c, th) {
   const type = { line: 'line', area: 'line', pie: 'pie', doughnut: 'doughnut', polar: 'polarArea' }[ct] || 'bar';
   const cols = cm ? c.labels.map(l => cm[l] || '#9ca3af') : c.labels.map((_, i) => ST_COL[i % ST_COL.length]);
   const datasets = c.single
-    ? [line ? { label: 'Solicitudes', data: c.data, borderColor: ST_COL[0], backgroundColor: 'rgba(200,36,27,.15)', fill: ct === 'area', tension: .3, pointRadius: c.data.length > 60 ? 0 : 3, pointBackgroundColor: ST_COL[0] }
-      : { label: 'Solicitudes', data: c.data, backgroundColor: circ || cm ? cols : ST_COL[0], borderColor: th.bg, borderWidth: circ ? 2 : 0, borderRadius: circ ? 0 : 4 }]
+    ? [line ? { label: c.sp.cnt || 'Solicitudes', data: c.data, borderColor: ST_COL[0], backgroundColor: 'rgba(200,36,27,.15)', fill: ct === 'area', tension: .3, pointRadius: c.data.length > 60 ? 0 : 3, pointBackgroundColor: ST_COL[0] }
+      : { label: c.sp.cnt || 'Solicitudes', data: c.data, backgroundColor: circ || cm ? cols : ST_COL[0], borderColor: th.bg, borderWidth: circ ? 2 : 0, borderRadius: circ ? 0 : 4 }]
     : c.series.map((d, i) => ({ label: d.name, data: d.data, backgroundColor: ST_COL[i % ST_COL.length], borderRadius: stacked ? 0 : 3 }));
   const num = { beginAtZero: true, stacked, ticks: { color: th.text, precision: 0 }, grid: { color: th.grid } };
   const cat = { stacked, ticks: { color: th.text, autoSkip: c.sp.kind === 'date', maxRotation: 60 }, grid: { display: false } };
@@ -1424,7 +1424,7 @@ function tiStats() {
     <div class="row" style="flex-wrap:wrap"><label class="row">Desde<input type="date" data-chg="stf" data-k="from" value="${s.from}" style="width:auto"></label><label class="row">Hasta<input type="date" data-chg="stf" data-k="to" value="${s.to}" style="width:auto"></label>${pre}</div>
     <div class="row" style="flex-wrap:wrap">${M.nodept ? '' : sel('dept', 'Todos los departamentos', S.depts)}${M.flt.map(([k, l, o]) => sel(k, l, o())).join('')}<button class="btn sm" data-act="stclr">Limpiar filtros</button></div>
   </div>
-  <div class="stats">${kpi(c.total, M.nodept ? 'Tickets (según filtros)' : 'Solicitudes (según filtros)')}${kpi(c.topItem ? c.topItem[0] + ' · ' + c.topItem[1] : '—', M.topLbl, 1)}${kpi(c.top2 ? c.top2[0] + ' · ' + c.top2[1] : '—', c.k2Lbl, 1)}</div>
+  <div class="stats">${kpi(c.total, M.kpiLbl || (M.nodept ? 'Tickets (según filtros)' : 'Solicitudes (según filtros)'))}${kpi(c.topItem ? c.topItem[0] + ' · ' + c.topItem[1] : '—', M.topLbl, 1)}${kpi(c.top2 ? c.top2[0] + ' · ' + c.top2[1] : '—', c.k2Lbl, 1)}</div>
   <div class="panel stack">
     <div class="between"><h2 style="margin:0">${c.title}</h2><button class="btn primary" data-act="stxls">Descargar Excel</button></div>
     <div class="row" style="flex-wrap:wrap"><label class="row">Ver<select data-chg="stf" data-k="an" style="width:auto">${Object.entries(M.an).map(([k, v]) => `<option value="${k}" ${s.an === k ? 'selected' : ''}>${v.t}</option>`).join('')}</select></label>${c.sp.kind === 'date' ? `<label class="row">Agrupar por<select data-chg="stf" data-k="grp" style="width:auto">${[['day', 'Día'], ['week', 'Semana'], ['month', 'Mes']].map(([k, l]) => `<option value="${k}" ${s.grp === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : ''}</div>
@@ -1453,7 +1453,7 @@ async function stXls() {
   ws.getCell('A3').value = 'Generado: ' + new Date().toLocaleString('es');
   const fl = []; if (s.from) fl.push('Desde ' + fDMY(s.from)); if (s.to) fl.push('Hasta ' + fDMY(s.to)); if (s.dept && !M.nodept) fl.push('Departamento: ' + s.dept); M.flt.forEach(([k, l]) => { if (s[k]) fl.push(s[k]); });
   ws.getCell('A4').value = 'Filtros: ' + (fl.join(' · ') || 'ninguno (todas las solicitudes)');
-  [[M.nodept ? 'Tickets (según filtros)' : 'Solicitudes (según filtros)', c.total], [M.topLbl, c.topItem ? c.topItem[0] + ' (' + c.topItem[1] + ')' : '—'], [c.k2Lbl, c.top2 ? c.top2[0] + ' (' + c.top2[1] + ')' : '—']].forEach(([l, v], i) => { const r = ws.getRow(6 + i); r.getCell(1).value = l; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: 'left' }; });
+  [[M.kpiLbl || (M.nodept ? 'Tickets (según filtros)' : 'Solicitudes (según filtros)'), c.total], [M.topLbl, c.topItem ? c.topItem[0] + ' (' + c.topItem[1] + ')' : '—'], [c.k2Lbl, c.top2 ? c.top2[0] + ' (' + c.top2[1] + ')' : '—']].forEach(([l, v], i) => { const r = ws.getRow(6 + i); r.getCell(1).value = l; r.getCell(1).font = { bold: true }; r.getCell(2).value = v; r.getCell(2).alignment = { horizontal: 'left' }; });
   ws.getCell('A10').value = c.title; ws.getCell('A10').font = { bold: true, size: 13 };
   const h = ws.getRow(11); c.head.forEach((x, i) => { h.getCell(i + 1).value = x; }); hdr(h);
   c.rows.forEach((r, i) => { const row = ws.getRow(12 + i); r.forEach((v, j) => { const cl = row.getCell(j + 1); cl.value = v; cl.border = { bottom: thin }; if (j) cl.alignment = { horizontal: 'center' }; if (c.single && j === 2) cl.numFmt = '0.0%'; }); });
@@ -1903,6 +1903,88 @@ FORM.cmedit = f => {
   if (!items.length || items.some(x => !x.desc)) return toast('Describe lo que se necesita comprar');
   Object.assign(r.pedido, { fecha: f.fecha.value, unidad: f.unidad.value.trim(), items, obs: f.obs.value.trim() }); r.upd = Date.now(); save(); closeModal(); toast('Planilla guardada'); render();
 };
+
+
+/* ============ Estadísticas avanzadas del Gerente de Mantenimiento (G1) ============ */
+const fd = ts => ts ? fmt(ts) : '—';
+const MRESG = ['Por atender', 'Reparable', 'Requiere pedido'];
+const resT = r => r.res ? ({ alm: 'Descuento del almacén', ext: 'Compra externa', sin: 'Reparado sin gasto' })[r.res.tipo] || '—' : (r.state === 'terminada' ? 'Reparable (sin detalle)' : '—');
+const repTs = r => (r.res && r.res.ts) || (r.state === 'terminada' ? r.upd : 0);
+const s2proc = r => r.rrole ? ((r.pedido || {}).menor ? 'Compra menor de S2' : 'Solicitud propia de S2') : 'Solicitud recibida por S2';
+const S2PROC = ['Solicitud recibida por S2', 'Solicitud propia de S2', 'Compra menor de S2'];
+const s2res = r => (r.pedido || {}).menor ? 'Requiere pedido' : mRes(r);
+const supOf = r => SH[r.rrole] || ((r.area || 'infra') === 'auto' ? 'S1' : 'S2');
+const payS = r => ({ pedido: 'Por enviar al G1', gerente: 'Por aprobar (G1)', contaduria: 'Por pasar a contaduría', cobranza: 'En cobranza' })[r.state] || mStl(r);
+const PAYS = ['Por enviar al G1', 'Por aprobar (G1)', 'Por pasar a contaduría', 'En cobranza'];
+const payT = r => (r.pedido || {}).menor ? 'Compra menor' : (r.pedido || {}).tipo === 'servicio' ? 'Servicio' : 'Compra';
+const payItems = r => ((r.pedido || {}).items || []).map(x => x.desc + ' — ' + (x.cant || '') + ' ' + (x.um || '')).join('; ');
+const mMov = () => S.mant.filter(r => r.res && r.res.tipo === 'alm').flatMap(r => (r.res.items || []).map((x, i) => ({ id: r.id + '|' + i, uid: r.uid, uname: r.uname, ts: r.res.ts || r.upd || r.ts, dept: r.dept || '', place: r.place, prod: x.name, unit: x.unit, qty: +x.qty || 0, by: r.res.by || r.by || '', role: r.res.role, desc: r.res.desc || '' })));
+const detT = (head, rows, empty) => `<div class="tw"><table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((v, i) => `<td style="${i === 0 ? '' : ''}white-space:pre-wrap">${v}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${head.length}" class="empty">${empty}</td></tr>`}</tbody></table></div>`;
+
+ST_CFG.g1s2 = {
+  name: 'los procesos de S2 (Supervisor de Infraestructura)', file: 'procesos-s2', def: 'dept', kpiLbl: 'Procesos de S2 (según filtros)',
+  note: 'Incluye lo que le llega a S2, lo que S2 crea y cuándo marcó cada solicitud como reparable.', topLbl: 'Lugar que más le solicitan', topFn: r => r.rrole ? 'Procesos propios' : (r.place || 'Otro lugar'),
+  k2: { lbl: 'Departamento que más le solicita', multi: r => r.rrole ? [] : [[r.dept || 'Sin departamento', 1]] },
+  rows: () => S.mant.filter(r => (!r.rrole && (r.area || 'infra') === 'infra') || r.rrole === 'sup_infra'),
+  flt: [['f1', 'Todos los procesos', () => S2PROC, s2proc], ['f2', 'Todos los resultados', () => MRESG, s2res], ['f3', 'Toda resolución', () => ['Descuento del almacén', 'Compra externa', 'Reparado sin gasto', 'Reparable (sin detalle)'], resT]],
+  an: {
+    dept: { t: 'Departamentos que le hacen solicitudes a S2', kind: 'count', multi: r => r.rrole ? [] : [[r.dept || 'Sin departamento', 1]], limit: 20, first: 'Departamento', cnt: 'Solicitudes', cts: CT_SINGLE },
+    date: { t: 'Procesos de S2 por fecha', kind: 'date', cts: CT_DATE },
+    proc: { t: 'Procesos de S2 por tipo', kind: 'count', fn: s2proc, fixed: S2PROC, first: 'Tipo de proceso', cnt: 'Procesos', cts: CT_SINGLE },
+    res: { t: 'Resultado de las solicitudes recibidas', kind: 'count', multi: r => r.rrole ? [] : [[s2res(r), 1]], fixed: MRESG, first: 'Resultado', cnt: 'Solicitudes', colors: { 'Por atender': '#f59e0b', Reparable: '#059669', 'Requiere pedido': '#2563eb' }, cts: CT_SINGLE },
+    resol: { t: 'Cómo se resolvieron los reparables', kind: 'count', multi: r => (!r.rrole && r.state === 'terminada') ? [[resT(r), 1]] : [], first: 'Resolución', cnt: 'Reparables', cts: CT_SINGLE },
+    place: { t: 'Lugares con más solicitudes a S2', kind: 'count', multi: r => r.rrole ? [] : [[r.place || 'Otro lugar', 1]], limit: 15, first: 'Lugar', cnt: 'Solicitudes', cts: CT_SINGLE },
+    depres: { t: 'Qué le piden a S2 los departamentos (por tipo de lugar)', kind: 'matrix', fn: r => ptype(r.place), cts: CT_MAT }
+  },
+  cols: [['Fecha y hora', 18], ['Proceso', 26], ['Solicitante', 26], ['Departamento', 22], ['Lugar', 26], ['Descripción', 55], ['Resultado', 17], ['Estado', 22], ['Marcada reparable', 18], ['Resolución', 24], ['Detalle de la resolución', 50]], dateCols: [1, 9], descCol: 6,
+  row: r => [stD(r.ts), s2proc(r), unm(r), r.dept || '', r.place, r.text, s2res(r), mStl(r), stD(repTs(r)), resT(r), r.res ? r.res.desc || '' : ''],
+  detail: c => `<h2>Registro de procesos de S2</h2>` + detT(['Fecha', 'Proceso', 'Departamento', 'Solicitante', 'Lugar', 'Resultado', 'Marcada reparable', 'Resolución'], c.rs.slice().sort((a, b) => b.ts - a.ts).slice(0, 300).map(r => [fd(r.ts), esc(s2proc(r)), r.rrole ? '<span class="muted">—</span>' : '<b>' + esc(r.dept || 'Sin departamento') + '</b>', esc(unm(r)), esc(r.place), esc(s2res(r)), fd(repTs(r)), esc(resT(r)) + (r.res && r.res.desc ? '<div class="small">' + esc(r.res.desc) + '</div>' : '')]), 'No hay procesos con estos filtros.')
+};
+
+ST_CFG.g1alm = {
+  name: 'el gasto del almacén de mantenimiento', file: 'almacen-mantenimiento', def: 'prod', kpiLbl: 'Usos del almacén (según filtros)',
+  note: 'Cada vez que una solicitud se resuelve con descuento del almacén queda un registro del material gastado.', topLbl: 'Producto más usado', topFn: r => r.prod,
+  rows: () => mMov(),
+  flt: [['f1', 'Todos los productos', () => [...new Set(mMov().map(r => r.prod))], r => r.prod], ['f2', 'Todos los lugares', () => [...new Set(mMov().map(r => r.place))], r => r.place], ['f3', 'Quién descontó', () => ['S1', 'S2', 'G1'], r => SH[r.role] || '']],
+  an: {
+    prod: { t: 'Cantidad gastada por producto', kind: 'count', multi: r => [[r.prod + ' (' + muT(r.unit) + ')', r.qty]], limit: 15, first: 'Producto', cnt: 'Cantidad gastada', noPct: true, cts: CT_SINGLE },
+    usos: { t: 'Productos más usados (n.º de veces)', kind: 'count', fn: r => r.prod, limit: 15, first: 'Producto', cnt: 'Usos', cts: CT_SINGLE },
+    date: { t: 'Usos del almacén por fecha', kind: 'date', cts: CT_DATE },
+    dept: { t: 'Departamentos que más material gastan', kind: 'count', fn: r => r.dept || 'Sin departamento', first: 'Departamento', cnt: 'Usos', cts: CT_SINGLE },
+    depprod: { t: 'Qué material gasta cada departamento (n.º de usos)', kind: 'matrix', fn: r => r.prod, cts: CT_MAT },
+    place: { t: 'Lugares donde más se gasta material', kind: 'count', fn: r => r.place || 'Otro lugar', limit: 15, first: 'Lugar', cnt: 'Usos', cts: CT_SINGLE },
+    who: { t: 'Quién descontó del almacén', kind: 'count', fn: r => (SH[r.role] || '') + ' ' + (r.by || ''), first: 'Supervisor', cnt: 'Usos', cts: CT_SINGLE }
+  },
+  cols: [['Fecha y hora', 18], ['Producto', 28], ['Unidad', 10], ['Cantidad', 12], ['Departamento', 22], ['Lugar', 26], ['Descontó', 24], ['Descripción', 55]], dateCols: [1], descCol: 8,
+  row: r => [stD(r.ts), r.prod, muT(r.unit), r.qty, r.dept, r.place, (SH[r.role] ? SH[r.role] + ' · ' : '') + r.by, r.desc],
+  detail: c => `<h2>Existencia actual del almacén</h2>` + detT(['Producto', 'Existencia', 'Creado por', 'Última modificación'], S.mstock.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => ['<b>' + esc(p.name) + '</b>', nq(p.qty) + ' ' + muT(p.unit), who(p.by, p.role) + '<div class="small">' + fd(p.ts) + '</div>', p.updBy ? esc(p.updBy) + '<div class="small">' + fd(p.upd) + '</div>' : '—']), 'El almacén aún no tiene productos.')
+    + `<h2>Registro de gastos</h2>` + detT(['Fecha', 'Producto', 'Cantidad', 'Departamento', 'Lugar', 'Descontó'], c.rs.slice().sort((a, b) => b.ts - a.ts).slice(0, 300).map(r => [fd(r.ts), '<b>' + esc(r.prod) + '</b>', nq(r.qty) + ' ' + muT(r.unit), esc(r.dept || '—'), esc(r.place), who(r.by, r.role)]), 'No hay gastos con estos filtros.')
+};
+
+ST_CFG.g1pay = {
+  name: 'las solicitudes de pago (solicitudes de pedido y compras menores)', file: 'solicitudes-de-pago', def: 'state', kpiLbl: 'Solicitudes de pago (según filtros)',
+  note: 'Registro de todas las planillas de pedido y compras menores, con su estado y fechas de firma.', topLbl: 'Lugar que más genera pagos', topFn: r => r.place || 'Otro lugar',
+  rows: () => S.mant.filter(r => r.pedido && (r.pedido.items || []).length && ['pedido', 'gerente', 'contaduria', 'cobranza'].includes(r.state)).map(r => Object.assign({}, r, { ts: r.pedido.ts || r.ts })),
+  flt: [['f1', 'Todos los tipos', () => ['Compra', 'Servicio', 'Compra menor'], payT], ['f2', 'Todos los estados', () => PAYS, payS], ['f3', 'Todos los supervisores', () => ['S1', 'S2'], supOf]],
+  an: {
+    state: { t: 'Solicitudes de pago por estado', kind: 'count', fn: payS, fixed: PAYS, first: 'Estado', cnt: 'Planillas', colors: { 'Por enviar al G1': '#9ca3af', 'Por aprobar (G1)': '#f59e0b', 'Por pasar a contaduría': '#2563eb', 'En cobranza': '#059669' }, cts: CT_SINGLE },
+    date: { t: 'Solicitudes de pago por fecha', kind: 'date', cts: CT_DATE },
+    tipo: { t: 'Solicitudes de pago por tipo', kind: 'count', fn: payT, fixed: ['Compra', 'Servicio', 'Compra menor'], first: 'Tipo', cnt: 'Planillas', cts: CT_SINGLE },
+    sup: { t: 'Solicitudes de pago por supervisor', kind: 'count', fn: supOf, fixed: ['S1', 'S2'], first: 'Supervisor', cnt: 'Planillas', cts: CT_SINGLE },
+    dept: { t: 'Departamentos que generan más pagos', kind: 'count', fn: r => r.dept || 'Sin departamento', first: 'Departamento', cnt: 'Planillas', cts: CT_SINGLE },
+    item: { t: 'Ítems que más se piden', kind: 'count', multi: r => (r.pedido.items || []).map(x => [String(x.desc || '').trim() || 'Sin descripción', 1]), limit: 15, first: 'Ítem', cnt: 'Planillas', cts: CT_SINGLE },
+    place: { t: 'Lugares que más generan pagos', kind: 'count', fn: r => r.place || 'Otro lugar', limit: 15, first: 'Lugar', cnt: 'Planillas', cts: CT_SINGLE }
+  },
+  cols: [['Fecha y hora', 18], ['Supervisor', 12], ['Solicitante', 26], ['Departamento', 22], ['Lugar', 26], ['Tipo', 14], ['Ítems', 60], ['Estado', 22], ['Firma del supervisor', 18], ['Firma del G1', 18], ['Enviada a cobranza', 18]], dateCols: [1, 9, 10, 11], descCol: 7,
+  row: r => [stD(r.ts), supOf(r), unm(r), r.dept || '', r.place, payT(r), payItems(r), payS(r), stD((r.pedido.firmaSup || {}).ts), stD((r.pedido.firmaGer || {}).ts), stD(r.cobTs)],
+  detail: c => `<h2>Registro de solicitudes de pago</h2>` + detT(['Fecha', 'Supervisor', 'Departamento', 'Tipo', 'Ítems', 'Estado', 'Firma supervisor', 'Firma G1', 'A cobranza'], c.rs.slice().sort((a, b) => b.ts - a.ts).slice(0, 300).map(r => [fd(r.ts), esc(supOf(r)), esc(r.dept || '—'), esc(payT(r)), esc(payItems(r)), esc(payS(r)), fd((r.pedido.firmaSup || {}).ts), fd((r.pedido.firmaGer || {}).ts), fd(r.cobTs)]), 'No hay solicitudes de pago con estos filtros.')
+};
+
+const vG1Stats = () => {
+  const g = ui.gsub || 's2';
+  return `<div class="tabs" style="max-width:700px;margin-bottom:12px">${[['s2', 'Procesos de S2'], ['alm', 'Almacén (gasto de material)'], ['pay', 'Solicitudes de pago']].map(([k, l]) => `<button data-act="gsub" data-k="${k}" class="${g === k ? 'on' : ''}">${l}</button>`).join('')}</div>` + tiStats();
+};
+ACT.gsub = t => { ui.gsub = t.dataset.k; ui.st = null; ST_ANIM = true; render(); };
 
 /* ============ Notificaciones de escritorio ============ */
 let NSEEN = null, unreadN = 0;
