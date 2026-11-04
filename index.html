@@ -292,9 +292,9 @@ let idleT; const IDLE_MS = 15 * 60 * 1000;
 const idleReset = () => { clearTimeout(idleT); idleT = setTimeout(() => { if (ui.user) { ACT.logout(); toast('Sesión cerrada por inactividad'); } }, IDLE_MS); };
 ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev => document.addEventListener(ev, idleReset, { passive: true })); idleReset();
 const EMAIL = n => 'almacen.' + String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') + '@gmail.com';
-let S = { users: [], depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], firmas: [], lockdown: false };
+let S = { users: [], depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], fin: [], firmas: [], lockdown: false };
 let SNAP = {};
-const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), tk: () => S.tk, stock: () => S.stock, mstock: () => S.mstock, firmas: () => S.firmas, ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
+const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), tk: () => S.tk, stock: () => S.stock, mstock: () => S.mstock, fin: () => S.fin, firmas: () => S.firmas, ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
 function snapNow() {
   const m = {};
   for (const c in COLL) for (const x of COLL[c]()) m[c + '|' + x.id] = JSON.stringify(x);
@@ -329,7 +329,7 @@ function save() {
 async function loadAll() {
   const [p, it] = await Promise.all([SB.from('profiles').select('*'), SB.from('items').select('coll,id,data').limit(5000)]);
   if (p.error || it.error) throw (p.error || it.error);
-  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], firmas: [], lockdown: false };
+  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], fin: [], firmas: [], lockdown: false };
   const UC = {}; for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'cargos') S.cargos.push(r.data.n); else if (r.coll === 'ucargo') UC[r.id] = r.data.cargo; else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (S[r.coll]) S[r.coll].push(r.data); }
   S.users.forEach(u => { u.cargo = UC[u.id] || ''; });
   SNAP = snapNow();
@@ -1209,8 +1209,8 @@ function viewSup() {
 function viewGer() {
   const u = cur(), v = ui.view, all = S.mant.filter(r => r.pedido && ['gerente', 'contaduria', 'cobranza'].includes(r.state)).sort((a, b) => (b.cobTs || b.sent || b.ts) - (a.cobTs || a.sent || a.ts));
   const q = all.filter(r => r.state === 'gerente'), acc = all.filter(r => r.state === 'contaduria'), cob = all.filter(r => r.state === 'cobranza');
-  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'malm' ? vMalm() : v === 'stats' ? vG1Stats() : v === 'gcob' ? `<h1>Enviadas a cobranza</h1><p class="sub">Solicitudes de pedido firmadas por ti que ya recibió cobranza.</p>${pgrid(cob, 'ger', 'Aún no has enviado solicitudes a cobranza.')}` : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste. Para enviarlas a cobranza debes <b>firmarlas</b>: sin tu firma no se pueden enviar. Con tu firma guardada basta un clic.</p>${sigAllBtn('gcoball', acc, 'Firmar y enviar todas a cobranza')}${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría. Las <b>compras menores</b> se aprueban con tu firma y pasan directo a cobranza.</p>${sigAllBtn('gcoball', q.filter(r => (r.pedido || {}).menor), 'Firmar y aprobar todas las compras menores')}${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
-  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', acc.length], ['gcob', 'Enviadas a cobranza', 0], ['malm', 'Almacén de mantenimiento', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'malm' ? vMalm() : v === 'fin' ? vFin() : v === 'stats' ? vG1Stats() : v === 'gcob' ? `<h1>Enviadas a cobranza</h1><p class="sub">Solicitudes de pedido firmadas por ti que ya recibió cobranza.</p>${pgrid(cob, 'ger', 'Aún no has enviado solicitudes a cobranza.')}` : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste. Para enviarlas a cobranza debes <b>firmarlas</b>: sin tu firma no se pueden enviar. Con tu firma guardada basta un clic.</p>${sigAllBtn('gcoball', acc, 'Firmar y enviar todas a cobranza')}${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría. Las <b>compras menores</b> se aprueban con tu firma y pasan directo a cobranza.</p>${sigAllBtn('gcoball', q.filter(r => (r.pedido || {}).menor), 'Firmar y aprobar todas las compras menores')}${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
+  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', acc.length], ['gcob', 'Enviadas a cobranza', 0], ['malm', 'Almacén de mantenimiento', 0], ['fin', 'Control financiero de productos', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
 }
 let PNEW = null;
 Object.assign(ACT, {
@@ -1353,10 +1353,10 @@ function loadLib(url, g) {
 function stPeriods(rs, grp) {
   if (!rs.length) return [];
   const key = ts => { const d = new Date(ts); return grp === 'month' ? new Date(d.getFullYear(), d.getMonth(), 1) : grp === 'week' ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)) : new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
-  const cnt = new Map(); rs.forEach(r => { const k = +key(r.ts); cnt.set(k, (cnt.get(k) || 0) + 1); });
+  const cnt = new Map(); rs.forEach(r => { const k = +key(r.ts); cnt.set(k, (cnt.get(k) || 0) + (r.w != null ? r.w : 1)); });
   const ks = [...cnt.keys()], end = Math.max(...ks), out = []; let d = new Date(Math.min(...ks));
   const lbl = k => { const x = new Date(k); return grp === 'month' ? x.toLocaleDateString('es', { month: 'short', year: 'numeric' }) : (grp === 'week' ? 'Sem. ' : '') + x.toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
-  while (+d <= end && out.length < 800) { out.push([lbl(+d), cnt.get(+d) || 0]); d = grp === 'month' ? new Date(d.getFullYear(), d.getMonth() + 1, 1) : new Date(d.getFullYear(), d.getMonth(), d.getDate() + (grp === 'week' ? 7 : 1)); }
+  while (+d <= end && out.length < 800) { out.push([lbl(+d), Math.round((cnt.get(+d) || 0) * 100) / 100]); d = grp === 'month' ? new Date(d.getFullYear(), d.getMonth() + 1, 1) : new Date(d.getFullYear(), d.getMonth(), d.getDate() + (grp === 'week' ? 7 : 1)); }
   return out;
 }
 function stCompute() {
@@ -1377,7 +1377,7 @@ function stCompute() {
     let pairs;
     if (sp.kind === 'date') pairs = stPeriods(rs, s.grp);
     else { const m = sp.multi ? (() => { const mm = new Map(); rs.forEach(r => sp.multi(r).forEach(([k, w]) => mm.set(k, (mm.get(k) || 0) + w))); return mm; })() : tally(sp.fn); pairs = sp.fixed ? [...sp.fixed.map(k => [k, m.get(k) || 0]), ...[...m.entries()].filter(([k]) => !sp.fixed.includes(k))] : top(m); if (sp.limit) pairs = pairs.slice(0, sp.limit); }
-    c.labels = pairs.map(p => p[0]); c.data = pairs.map(p => p[1]); c.single = true;
+    pairs = pairs.map(([k, v]) => [k, Math.round(v * 100) / 100]); c.labels = pairs.map(p => p[0]); c.data = pairs.map(p => p[1]); c.single = true;
     c.head = [sp.kind === 'date' ? 'Período' : sp.first, sp.cnt || 'Solicitudes', ...(sp.noPct ? [] : ['% del total'])];
     c.rows = pairs.map(([l, n]) => sp.noPct ? [l, n] : [l, n, total ? n / total : 0]);
   }
@@ -1986,7 +1986,7 @@ ST_CFG.g1pay = {
 
 const vG1Stats = () => {
   const g = ui.gsub || 's2';
-  return `<div class="tabs" style="max-width:700px;margin-bottom:12px">${[['s2', 'Procesos de S2'], ['alm', 'Almacén (gasto de material)'], ['pay', 'Solicitudes de pago']].map(([k, l]) => `<button data-act="gsub" data-k="${k}" class="${g === k ? 'on' : ''}">${l}</button>`).join('')}</div>` + tiStats();
+  return `<div class="tabs" style="max-width:960px;margin-bottom:12px">${[['s2', 'Procesos de S2'], ['alm', 'Almacén (gasto de material)'], ['pay', 'Solicitudes de pago'], ['fin', 'Gastos por departamento']].map(([k, l]) => `<button data-act="gsub" data-k="${k}" class="${g === k ? 'on' : ''}">${l}</button>`).join('')}</div>` + tiStats();
 };
 ACT.gsub = t => { ui.gsub = t.dataset.k; ui.st = null; ST_ANIM = true; render(); };
 
@@ -2055,6 +2055,70 @@ function vTkAct() {
   <div class="stats"><div class="stat"><b>${n(r => ['nuevo'].includes(r.state))}</b><span>Sin enviar</span></div><div class="stat"><b>${n(r => ['enviado', 'devuelto'].includes(r.state))}</b><span>Con Leovanny (despacho)</span></div><div class="stat"><b>${n(r => r.state === 'salida')}</b><span>Con Osmerly (verificación)</span></div><div class="stat"><b>${n(r => ['confirmado', 'despachado'].includes(r.state))}</b><span>Con Yorgely (almacén)</span></div></div>
   ${rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(card).join('')}</div>` : '<div class="tw"><div class="empty">No hay tickets activos.</div></div>'}`;
 }
+
+/* ============ Control financiero de productos (G1) ============ */
+const FIN_CUR = '$';
+const money = n => FIN_CUR + ' ' + (+n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const finTot = p => Math.round((p.gastos || []).reduce((a, g) => a + (+g.amount || 0), 0) * 100) / 100;
+const finDepts = () => { const l = S.depts.slice(); S.fin.forEach(p => { if (!l.includes(p.dept)) l.push(p.dept); }); return l.sort((a, b) => a.localeCompare(b)); };
+function vFin() {
+  const all = S.fin, tot = all.reduce((a, p) => a + finTot(p), 0), nG = all.reduce((a, p) => a + (p.gastos || []).length, 0);
+  if (!ui.fd) {
+    const ds = finDepts().map(d => { const ps = all.filter(p => p.dept === d), gs = ps.flatMap(p => p.gastos || []); return { d, ps, t: ps.reduce((a, p) => a + finTot(p), 0), last: gs.length ? Math.max(...gs.map(g => g.ts)) : 0 }; });
+    const top = ds.slice().sort((a, b) => b.t - a.t)[0];
+    return `<div class="between"><div><h1>Control financiero de productos</h1><p class="sub">Entra a un departamento, crea una subtarjeta por cada producto (por ejemplo "Máquina 1") y ve sumando los gastos de mantenimiento invertidos en él.</p></div><button class="btn" data-act="finstats">Ver estadísticas</button></div>
+    <div class="stats"><div class="stat"><b>${money(tot)}</b><span>Total invertido</span></div><div class="stat"><b style="font-size:18px">${top && top.t > 0 ? esc(top.d) : '—'}</b><span>Departamento con más gasto</span></div><div class="stat"><b>${all.length}</b><span>Productos controlados</span></div><div class="stat"><b>${nG}</b><span>Gastos registrados</span></div></div>
+    ${ds.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">${ds.map(x => `<div class="panel stack" data-act="fdept" data-n="${esc(x.d)}" style="cursor:pointer"><div class="between"><b>${esc(x.d)}</b><span class="pill gray">${x.ps.length} producto${x.ps.length === 1 ? '' : 's'}</span></div><div style="font-size:26px;font-weight:600">${money(x.t)}</div><div class="small">${x.last ? 'Último gasto: ' + fd(x.last) : 'Sin gastos registrados'}</div></div>`).join('')}</div>` : '<div class="tw"><div class="empty">Aún no hay departamentos creados. El administrador debe crearlos primero.</div></div>'}`;
+  }
+  const d = ui.fd, ps = all.filter(p => p.dept === d).sort((a, b) => a.name.localeCompare(b.name)), t = ps.reduce((a, p) => a + finTot(p), 0), today = new Date().toISOString().slice(0, 10);
+  const card = p => { const gs = (p.gastos || []).slice().sort((a, b) => b.ts - a.ts); return `<div class="panel stack"><div class="between"><div><b>${esc(p.name)}</b><div class="small">Creado por ${esc(p.by)} · ${fd(p.ts)}</div></div><div style="text-align:right"><div style="font-size:22px;font-weight:600">${money(finTot(p))}</div><div class="small">${gs.length} gasto${gs.length === 1 ? '' : 's'}</div></div></div>
+    <form data-form="fgasto" data-id="${p.id}" class="stack"><div class="row" style="flex-wrap:wrap"><input name="a" type="number" min="0.01" step="any" placeholder="Monto (${FIN_CUR})" required style="flex:1;min-width:100px"><input name="d" placeholder="Descripción del gasto" required style="flex:2;min-width:150px"><input name="f" type="date" value="${today}" style="width:auto"></div><button class="btn primary">Sumar gasto</button></form>
+    <details><summary style="cursor:pointer;font-size:13px">Ver gastos (${gs.length})</summary>${gs.map(g => `<div class="between" style="font-size:13px;margin-top:6px;gap:8px"><div>${fd(g.ts)} · ${esc(g.desc)}<div class="small">Registró ${esc(g.by)}</div></div><div style="white-space:nowrap"><b>${money(g.amount)}</b> <button class="btn sm danger" data-act="fgdel" data-id="${p.id}" data-g="${g.id}" title="Eliminar gasto">✕</button></div></div>`).join('') || '<div class="muted" style="font-size:13px;margin-top:6px">Aún no hay gastos.</div>'}</details>
+    <div class="row"><button class="btn sm" data-act="fren" data-id="${p.id}">Renombrar</button><button class="btn sm danger" data-act="fprodel" data-id="${p.id}">Eliminar producto</button></div></div>`; };
+  return `<div class="between"><div><button class="btn sm" data-act="fback">← Departamentos</button><h1 style="margin-top:8px">${esc(d)}</h1><p class="sub">Total invertido en mantenimiento: <b>${money(t)}</b></p></div><button class="btn" data-act="finstats">Ver estadísticas</button></div>
+  <form data-form="fprod" class="panel row" style="flex-wrap:wrap;margin-bottom:14px"><input name="n" placeholder="Nombre del producto (ej.: Máquina 1)" required style="flex:1;min-width:220px"><button class="btn primary">Crear subtarjeta</button></form>
+  ${ps.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px">${ps.map(card).join('')}</div>` : '<div class="tw"><div class="empty">Este departamento aún no tiene productos. Crea la primera subtarjeta.</div></div>'}`;
+}
+FORM.fprod = f => {
+  const n = f.n.value.trim(), d = ui.fd; if (!n || !d) return;
+  if (S.fin.some(p => p.dept === d && p.name.toLowerCase() === n.toLowerCase())) return toast('Ya existe ese producto en este departamento');
+  const u = cur(); S.fin.push({ id: uid(), dept: d, name: n, ts: Date.now(), by: dn(u), byId: u.id, gastos: [] }); save(); toast('Subtarjeta creada'); render();
+};
+FORM.fgasto = f => {
+  const p = S.fin.find(x => x.id === f.dataset.id); if (!p) return; const a = Math.round(parseFloat(f.a.value) * 100) / 100, d = f.d.value.trim();
+  if (!(a > 0) || !d) return toast('Escribe un monto mayor a 0 y la descripción');
+  const u = cur(), ts = f.f.value ? new Date(f.f.value + 'T12:00:00').getTime() : Date.now();
+  (p.gastos = p.gastos || []).push({ id: uid(), amount: a, desc: d, ts, reg: Date.now(), by: dn(u), byId: u.id }); save(); toast('Gasto sumado · total de ' + p.name + ': ' + money(finTot(p))); render();
+};
+FORM.fren = f => {
+  const p = S.fin.find(x => x.id === f.dataset.id); if (!p) return; const n = f.n.value.trim(); if (!n) return;
+  if (S.fin.some(x => x.id !== p.id && x.dept === p.dept && x.name.toLowerCase() === n.toLowerCase())) return toast('Ya existe ese producto en este departamento');
+  p.name = n; save(); closeModal(); render();
+};
+Object.assign(ACT, {
+  fdept: t => { ui.fd = t.dataset.n; render(); },
+  fback: () => { ui.fd = ''; render(); },
+  finstats: () => { ui.view = 'stats'; ui.gsub = 'fin'; ui.st = null; ST_ANIM = true; render(); },
+  fren: t => { const p = S.fin.find(x => x.id === t.dataset.id); if (!p) return; openModal(`<div class="modal" style="max-width:420px"><form data-form="fren" data-id="${p.id}"><div class="modal-h"><h2 style="margin:0">Renombrar producto</h2></div><div class="modal-b stack"><label>Nombre<input name="n" value="${esc(p.name)}" required></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar</button></div></form></div>`); },
+  fprodel: t => askConfirm('¿Eliminar este producto y todos sus gastos registrados? No se puede deshacer.', () => { S.fin = S.fin.filter(x => x.id !== t.dataset.id); save(); render(); }, 'Eliminar'),
+  fgdel: t => askConfirm('¿Eliminar este gasto? El total del producto se recalcula.', () => { const p = S.fin.find(x => x.id === t.dataset.id); if (!p) return; p.gastos = (p.gastos || []).filter(g => g.id !== t.dataset.g); save(); render(); }, 'Eliminar')
+});
+
+ST_CFG.g1fin = {
+  name: 'los gastos de mantenimiento por departamento', file: 'gastos-mantenimiento', def: 'dept', kpiLbl: 'Gastos registrados (según filtros)',
+  note: 'Montos sumados en las subtarjetas del Control financiero de productos (en ' + FIN_CUR + ').', topLbl: 'Departamento con más gastos registrados', topFn: r => r.dept || 'Sin departamento',
+  rows: () => S.fin.flatMap(p => (p.gastos || []).map(g => ({ id: g.id, ts: g.ts, dept: p.dept, prod: p.name, amount: +g.amount || 0, w: +g.amount || 0, desc: g.desc, by: g.by }))),
+  flt: [['f1', 'Todos los productos', () => [...new Set(S.fin.map(p => p.name))], r => r.prod]],
+  an: {
+    dept: { t: 'Monto invertido por departamento', kind: 'count', multi: r => [[r.dept || 'Sin departamento', r.amount]], first: 'Departamento', cnt: 'Monto (' + FIN_CUR + ')', cts: CT_SINGLE },
+    prod: { t: 'Productos con más inversión', kind: 'count', multi: r => [[(r.dept || 'Sin departamento') + ' · ' + r.prod, r.amount]], limit: 15, first: 'Producto', cnt: 'Monto (' + FIN_CUR + ')', cts: CT_SINGLE },
+    date: { t: 'Monto invertido por fecha', kind: 'date', noPct: true, cnt: 'Monto (' + FIN_CUR + ')', cts: CT_DATE },
+    n: { t: 'Cantidad de gastos por departamento', kind: 'count', fn: r => r.dept || 'Sin departamento', first: 'Departamento', cnt: 'Gastos', cts: CT_SINGLE }
+  },
+  cols: [['Fecha', 18], ['Departamento', 24], ['Producto', 28], ['Descripción', 55], ['Monto (' + FIN_CUR + ')', 14], ['Registró', 24]], dateCols: [1], descCol: 4,
+  row: r => [stD(r.ts), r.dept, r.prod, r.desc, r.amount, r.by],
+  detail: c => { const by = {}; c.rs.forEach(r => { ((by[r.dept] = by[r.dept] || {})[r.prod] = by[r.dept][r.prod] || []).push(r); }); const sum = a => a.reduce((s, r) => s + r.amount, 0); const rows = []; Object.entries(by).sort((a, b) => sum(Object.values(b[1]).flat()) - sum(Object.values(a[1]).flat())).forEach(([d, ps]) => { rows.push(['<b>' + esc(d || 'Sin departamento') + '</b>', '', '<b>' + money(sum(Object.values(ps).flat())) + '</b>']); Object.entries(ps).sort((a, b) => sum(b[1]) - sum(a[1])).forEach(([p, g]) => rows.push(['&nbsp;&nbsp;↳ ' + esc(p), g.length + ' gasto' + (g.length === 1 ? '' : 's'), money(sum(g))])); }); return `<h2>Total por departamento y producto</h2>` + detT(['Departamento / producto', 'Gastos', 'Total invertido'], rows, 'No hay gastos registrados con estos filtros.'); }
+};
 /* ============ Notificaciones de escritorio ============ */
 let NSEEN = null, unreadN = 0;
 function nItems() {
