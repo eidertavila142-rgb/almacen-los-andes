@@ -292,9 +292,9 @@ let idleT; const IDLE_MS = 15 * 60 * 1000;
 const idleReset = () => { clearTimeout(idleT); idleT = setTimeout(() => { if (ui.user) { ACT.logout(); toast('Sesión cerrada por inactividad'); } }, IDLE_MS); };
 ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev => document.addEventListener(ev, idleReset, { passive: true })); idleReset();
 const EMAIL = n => 'almacen.' + String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') + '@gmail.com';
-let S = { users: [], depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
+let S = { users: [], depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], fin: [], firmas: [], lockdown: false };
 let SNAP = {};
-const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), tk: () => S.tk, stock: () => S.stock, mstock: () => S.mstock, fin: () => S.fin, firmas: () => S.firmas, sdeleg: () => S.sdeleg, ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
+const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), tk: () => S.tk, stock: () => S.stock, mstock: () => S.mstock, fin: () => S.fin, firmas: () => S.firmas, ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
 function snapNow() {
   const m = {};
   for (const c in COLL) for (const x of COLL[c]()) m[c + '|' + x.id] = JSON.stringify(x);
@@ -329,7 +329,7 @@ function save() {
 async function loadAll() {
   const [p, it] = await Promise.all([SB.from('profiles').select('*'), SB.from('items').select('coll,id,data').limit(5000)]);
   if (p.error || it.error) throw (p.error || it.error);
-  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
+  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], fin: [], firmas: [], lockdown: false };
   const UC = {}; for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'cargos') S.cargos.push(r.data.n); else if (r.coll === 'ucargo') UC[r.id] = r.data.cargo; else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (S[r.coll]) S[r.coll].push(r.data); }
   S.users.forEach(u => { u.cargo = UC[u.id] || ''; });
   SNAP = snapNow();
@@ -1021,12 +1021,6 @@ const ACT = {
   }
 };
 const CHG = {
-  sdeleg: t => {
-    if (cur().role !== 'gerente_mant') return toast('Solo G1 puede cambiar esto');
-    const r = t.dataset.r, o = r === 'sup_auto' ? 'S2' : 'S1', n = r === 'sup_auto' ? 'S1' : 'S2';
-    let d = S.sdeleg.find(x => x.id === r); if (!d) { d = { id: r, on: false }; S.sdeleg.push(d); }
-    d.on = t.checked; save(); toast(d.on ? n + ' ahora también hace las funciones de ' + o : n + ' vuelve a sus funciones'); render();
-  },
   lockdown: t => { S.lockdown = t.checked; save(); toast(S.lockdown ? 'Acceso bloqueado fuera de horario laboral' : 'Accesos restablecidos'); render(); },
   dl: t => { S.docs.find(d => d.id === t.dataset.id).download = t.checked; save(); toast(t.checked ? 'Descarga habilitada' : 'Descarga denegada'); render(); },
   logfilter: t => { ui.logUser = t.value; render(); }
@@ -1160,9 +1154,6 @@ Object.assign(FORM, {
 
 /* ============ Supervisores de mantenimiento (S1 Automotriz · S2 Infraestructura) ============ */
 const SUP = { sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura' };
-/* Delegación G1: áreas que cubre un supervisor (la suya + la del otro si G1 se la activó) */
-const sdOn = r => { const d = S.sdeleg.find(x => x.id === r); return !!(d && d.on); };
-const supAreas = u => { const a = u.role === 'sup_auto' ? ['auto'] : u.role === 'sup_infra' ? ['infra'] : []; if (a.length && sdOn(u.role)) a.push(u.role === 'sup_auto' ? 'infra' : 'auto'); return a; };
 const rolTag = r => `<div class="small">${r.rrole ? SUP[r.rrole] : (rolOf(r) || 'Usuario')}</div>`;
 function supTable(rs, mode) {
   if (!rs.length) return `<div class="tw"><div class="empty">${mode === 'mine' ? 'Aún no has enviado solicitudes.' : 'No hay solicitudes.'}</div></div>`;
@@ -1200,8 +1191,8 @@ Object.assign(ACT, {
   mu: t => { ui.uview = t.dataset.v; ui.view = 'u:' + t.dataset.v; ui.rs = ui.rcat = ui.rdep = ''; render(); }
 });
 function viewSup() {
-  const u = cur(), v = ui.view, area = u.role === 'sup_auto' ? 'auto' : 'infra', areas = supAreas(u);
-  const inbox = S.mant.filter(r => areas.includes(r.area || 'infra') && r.uid !== u.id && !r.rrole).sort((a, b) => b.ts - a.ts);
+  const u = cur(), v = ui.view, area = u.role === 'sup_auto' ? 'auto' : 'infra';
+  const inbox = S.mant.filter(r => (r.area || 'infra') === area && r.uid !== u.id && !r.rrole).sort((a, b) => b.ts - a.ts);
   const open = inbox.filter(r => r.state === 'enviada'), done = inbox.filter(r => r.state === 'terminada');
   const mine = S.mant.filter(r => r.uid === u.id).sort((a, b) => b.ts - a.ts);
   const withP = [...inbox.filter(r => r.pedido && r.state !== 'terminada'), ...mine.filter(r => r.pedido)].sort((a, b) => (b.upd || b.ts) - (a.upd || a.ts));
@@ -1218,19 +1209,10 @@ function viewSup() {
 function viewGer() {
   const u = cur(), v = ui.view, all = S.mant.filter(r => r.pedido && ['gerente', 'contaduria', 'cobranza'].includes(r.state)).sort((a, b) => (b.cobTs || b.sent || b.ts) - (a.cobTs || a.sent || a.ts));
   const q = all.filter(r => r.state === 'gerente'), acc = all.filter(r => r.state === 'contaduria'), cob = all.filter(r => r.state === 'cobranza');
-  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'malm' ? vMalm() : v === 'fin' ? vFin() : v === 'stats' ? vG1Stats() : v === 'gsup' ? vGSup() : v === 'gcob' ? `<h1>Enviadas a cobranza</h1><p class="sub">Solicitudes de pedido firmadas por ti que ya recibió cobranza.</p>${pgrid(cob, 'ger', 'Aún no has enviado solicitudes a cobranza.')}` : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste. Para enviarlas a cobranza debes <b>firmarlas</b>: sin tu firma no se pueden enviar. Con tu firma guardada basta un clic.</p>${sigAllBtn('gcoball', acc, 'Firmar y enviar todas a cobranza')}${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría. Las <b>compras menores</b> se aprueban con tu firma y pasan directo a cobranza.</p>${sigAllBtn('gcoball', q.filter(r => (r.pedido || {}).menor), 'Firmar y aprobar todas las compras menores')}${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
-  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', acc.length], ['gcob', 'Enviadas a cobranza', 0], ['malm', 'Almacén de mantenimiento', 0], ['fin', 'Control financiero de productos', 0], ['gsup', 'Supervisores', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'malm' ? vMalm() : v === 'fin' ? vFin() : v === 'stats' ? vG1Stats() : v === 'gcob' ? `<h1>Enviadas a cobranza</h1><p class="sub">Solicitudes de pedido firmadas por ti que ya recibió cobranza.</p>${pgrid(cob, 'ger', 'Aún no has enviado solicitudes a cobranza.')}` : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste. Para enviarlas a cobranza debes <b>firmarlas</b>: sin tu firma no se pueden enviar. Con tu firma guardada basta un clic.</p>${sigAllBtn('gcoball', acc, 'Firmar y enviar todas a cobranza')}${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría. Las <b>compras menores</b> se aprueban con tu firma y pasan directo a cobranza.</p>${sigAllBtn('gcoball', q.filter(r => (r.pedido || {}).menor), 'Firmar y aprobar todas las compras menores')}${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
+  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', acc.length], ['gcob', 'Enviadas a cobranza', 0], ['malm', 'Almacén de mantenimiento', 0], ['fin', 'Control financiero de productos', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
 }
 let PNEW = null;
-function vGSup() {
-  const nm = r => (S.users.find(x => x.role === r) || {}).name || (r === 'sup_auto' ? 'S1' : 'S2');
-  const A = { sup_auto: 'Automotriz', sup_infra: 'Infraestructura' };
-  const card = (rcv, src) => { const on = sdOn(rcv); return `<div class="panel between">
-    <div><h3>${esc(nm(rcv))} hace las funciones de ${esc(nm(src))} (${A[src]})</h3><div class="muted" style="margin-top:2px">Encendido: ${esc(nm(rcv))} también recibe y atiende las solicitudes de mantenimiento de ${A[src]}, además de las suyas. Apagado: ${esc(nm(rcv))} atiende solo las de ${A[rcv]}.</div></div>
-    <div class="row" style="flex:none"><span class="pill ${on ? 'ok' : ''}">${on ? 'Encendido' : 'Apagado'}</span>
-      <label class="sw"><input type="checkbox" data-chg="sdeleg" data-r="${rcv}" ${on ? 'checked' : ''}><span></span></label></div></div>`; };
-  return `<h1>Supervisores</h1><p class="sub">Cada supervisor atiende un área distinta. Si uno falta, enciende aquí las funciones del otro para que lo cubra. El cambio se aplica de inmediato.</p>${card('sup_auto', 'sup_infra')}${card('sup_infra', 'sup_auto')}`;
-}
 Object.assign(ACT, {
   pnew: () => { const u = cur(); PNEW = { id: uid(), uid: u.id, uname: dn(u), dept: u.dept || '', rrole: u.role, area: 'gerencia', place: 'Solicitud de pedido propia', text: '', state: 'borrador', ts: Date.now() }; ACT.sped({ dataset: { id: PNEW.id } }); },
   sger: t => { const r = S.mant.find(x => x.id === t.dataset.id); if (!r || needFirma()) return; signSend(r); save(); toast('Firmada y enviada al G1'); render(); },
@@ -1325,7 +1307,7 @@ const ST_CFG = {
   },
   mant: {
     name: 'solicitudes de mantenimiento', file: 'mantenimiento', def: 'place', topLbl: 'Lugar que más solicita', topFn: r => r.place || 'Otro lugar',
-    rows: () => { const u = cur(), areas = supAreas(u); return S.mant.filter(r => areas.includes(r.area || 'infra') && r.uid !== u.id && !r.rrole); },
+    rows: () => { const u = cur(), area = u.role === 'sup_auto' ? 'auto' : 'infra'; return S.mant.filter(r => (r.area || 'infra') === area && r.uid !== u.id && !r.rrole); },
     flt: [['f1', 'Todos los lugares', () => places().flatMap(g => g[1]), r => r.place], ['f2', 'Todos los resultados', () => MRES, mRes]],
     an: {
       date: { t: 'Solicitudes por fecha', kind: 'date', cts: CT_DATE },
@@ -1847,7 +1829,7 @@ Object.assign(ACT, {
   mstockdel: t => { if (cur().role !== 'gerente_mant') return toast('Solo G1 puede eliminar productos'); askConfirm('¿Eliminar este producto del almacén de mantenimiento?', () => { S.mstock = S.mstock.filter(x => x.id !== t.dataset.id); save(); render(); }, 'Eliminar'); },
   sgerall: t => {
     if (needFirma()) return; const u = cur();
-    const rs = (t.dataset.ids || '').split(',').map(id => S.mant.find(x => x.id === id)).filter(r => r && r.state === 'pedido' && r.pedido && (r.pedido.items || []).length && (r.uid === u.id || supAreas(u).includes(r.area || 'infra')));
+    const rs = (t.dataset.ids || '').split(',').map(id => S.mant.find(x => x.id === id)).filter(r => r && r.state === 'pedido' && r.pedido && (r.pedido.items || []).length && (r.uid === u.id || (r.area || 'infra') === (u.role === 'sup_auto' ? 'auto' : 'infra')));
     if (!rs.length) return toast('No hay planillas por firmar'); rs.forEach(signSend); save(); toast(rs.length + ' planillas firmadas y enviadas al G1'); render();
   },
   gcoball: t => {
@@ -2148,7 +2130,7 @@ function nItems() {
   }
   if (u.role !== 'admin') S.ti.filter(r => r.uid === u.id).forEach(r => { if (r.seen) o.push(['tv|' + r.id, 'TI vio tu solicitud', r.cat]); if (r.state === 'proceso') o.push(['tp|' + r.id, 'TI está atendiendo tu solicitud', r.cat]); if (r.tiDone && !r.userDone) o.push(['tt|' + r.id, 'TI terminó tu solicitud: confírmala', r.cat]); if (r.state === 'incompleta') o.push(['ti|' + r.id + 'i', 'Tu solicitud de TI quedó incompleta', r.incMotivo || r.cat]); });
   if (u.role === 'gerente_mant') S.mant.filter(r => r.state === 'gerente').forEach(r => o.push(['mg|' + r.id, 'Nueva solicitud de pedido de ' + unm(r), r.place]));
-  if (SUP[u.role]) S.mant.filter(r => r.state === 'contaduria' && (r.uid === u.id || supAreas(u).includes(r.area || 'infra'))).forEach(r => o.push(['mc|' + r.id, 'Solicitud de pedido aceptada: por pasar a contaduría', r.place]));
+  if (SUP[u.role]) S.mant.filter(r => r.state === 'contaduria' && (r.uid === u.id || (r.area || 'infra') === (u.role === 'sup_auto' ? 'auto' : 'infra'))).forEach(r => o.push(['mc|' + r.id, 'Solicitud de pedido aceptada: por pasar a contaduría', r.place]));
   if (u.role === 'tk_desp') S.tk.filter(r => r.state === 'enviado').forEach(r => o.push(['td|' + r.id, 'Nuevo ticket de ' + r.cliente, r.no]));
   if (u.role === 'tk_desp') S.tk.filter(r => r.state === 'devuelto').forEach(r => o.push(['tdv|' + r.id, 'Ticket devuelto por verificación: ' + r.cliente, r.no]));
   if (u.role === 'tk_ver') S.tk.filter(r => r.state === 'salida').forEach(r => o.push(['tv|' + r.id, 'Ticket por verificar: ' + r.cliente, r.no]));
@@ -2156,7 +2138,7 @@ function nItems() {
   if (u.role === 'cobranza') { S.tk.filter(r => r.state === 'cobranza').forEach(r => o.push(['tc|' + r.id, 'Nuevo ticket en cobranza', r.cliente + ' · ' + r.no])); S.mant.filter(r => r.state === 'cobranza').forEach(r => o.push(['mq|' + r.id, 'Solicitud de pedido firmada recibida', r.place])); }
   if (u.role === 'admin') S.msgs.forEach(m => o.push(['msg|' + m.id, 'Nuevo mensaje de ' + m.uname, m.subject || '']));
   if (u.role === 'admin_ti') S.ti.filter(r => r.state === 'pendiente').forEach(r => o.push(['ti|' + r.id, 'Nueva solicitud TI de ' + r.uname, r.cat + (r.dept ? ' · ' + r.dept : '')]));
-  if (SUP[u.role] && supAreas(u).includes('infra')) S.mant.filter(r => r.state === 'enviada' && !r.rrole && (r.area || 'infra') === 'infra').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
+  if (u.role === 'sup_infra') S.mant.filter(r => r.state === 'enviada' && !r.rrole && (r.area || 'infra') === 'infra').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
   if (u.role === 'admin_mant') S.mant.filter(r => r.state === 'enviada').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
   return o;
 }
