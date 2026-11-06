@@ -672,7 +672,7 @@ function userForm(u) {
       <label>Cargo<select name="cargo"><option value="">Sin cargo</option>${S.cargos.map(c => `<option ${u.cargo === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
       <div class="grid2">
         <label>Departamento<select name="dept"><option value="" ${!u.dept ? 'selected' : ''}>Sin asignar</option>${S.depts.map(d => `<option ${u.dept === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></label>
-        <label>Rol<select name="role"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin Biblioteca</option><option value="admin_ti" ${u.role === 'admin_ti' ? 'selected' : ''}>Admin TI</option><option value="sup_auto" ${u.role === 'sup_auto' ? 'selected' : ''}>Supervisor de Automotriz</option><option value="sup_infra" ${u.role === 'sup_infra' ? 'selected' : ''}>Supervisor de Infraestructura</option><option value="gerente_mant" ${u.role === 'gerente_mant' ? 'selected' : ''}>Gerente de Mantenimiento</option><option value="tk_crea" ${u.role === 'tk_crea' ? 'selected' : ''}>Atención al cliente (tickets)</option><option value="tk_desp" ${u.role === 'tk_desp' ? 'selected' : ''}>Despacho</option><option value="tk_ver" ${u.role === 'tk_ver' ? 'selected' : ''}>Verificación de tickets</option><option value="tk_alm" ${u.role === 'tk_alm' ? 'selected' : ''}>Almacén</option><option value="cobranza" ${u.role === 'cobranza' ? 'selected' : ''}>Cobranza</option><option value="rrhh" ${u.role === 'rrhh' ? 'selected' : ''}>Recursos Humanos</option></select></label>
+        <label>Rol<select name="role"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin Biblioteca</option><option value="admin_ti" ${u.role === 'admin_ti' ? 'selected' : ''}>Admin TI</option><option value="sup_auto" ${u.role === 'sup_auto' ? 'selected' : ''}>Supervisor de Automotriz</option><option value="sup_infra" ${u.role === 'sup_infra' ? 'selected' : ''}>Supervisor de Infraestructura</option><option value="gerente_mant" ${u.role === 'gerente_mant' ? 'selected' : ''}>Gerente de Mantenimiento</option><option value="tk_crea" ${u.role === 'tk_crea' ? 'selected' : ''}>Atención al cliente (tickets)</option><option value="tk_desp" ${u.role === 'tk_desp' ? 'selected' : ''}>Despacho</option><option value="tk_ver" ${u.role === 'tk_ver' ? 'selected' : ''}>Verificación de tickets</option><option value="tk_alm" ${u.role === 'tk_alm' ? 'selected' : ''}>Almacén</option><option value="cobranza" ${u.role === 'cobranza' ? 'selected' : ''}>Cobranza</option><option value="rrhh" ${u.role === 'rrhh' ? 'selected' : ''}>Talento Humano</option></select></label>
       </div>
       <div class="err" id="uerr" hidden></div>
     </div>
@@ -688,7 +688,7 @@ function vNewU() {
     <label>Contraseña<input name="pass" required minlength="8"></label>
     <label>Departamento<select name="dept"><option value="">Sin asignar</option>${S.depts.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
     <label>Cargo<select name="cargo"><option value="">Sin cargo</option>${S.cargos.map(c => `<option>${esc(c)}</option>`).join('')}</select></label>
-    <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Admin Biblioteca</option><option value="admin_ti">Admin TI</option><option value="sup_auto">Supervisor de Automotriz</option><option value="sup_infra">Supervisor de Infraestructura</option><option value="gerente_mant">Gerente de Mantenimiento</option><option value="tk_crea">Atención al cliente (tickets)</option><option value="tk_desp">Despacho</option><option value="tk_ver">Verificación de tickets</option><option value="tk_alm">Almacén</option><option value="cobranza">Cobranza</option><option value="rrhh">Recursos Humanos</option></select></label>
+    <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Admin Biblioteca</option><option value="admin_ti">Admin TI</option><option value="sup_auto">Supervisor de Automotriz</option><option value="sup_infra">Supervisor de Infraestructura</option><option value="gerente_mant">Gerente de Mantenimiento</option><option value="tk_crea">Atención al cliente (tickets)</option><option value="tk_desp">Despacho</option><option value="tk_ver">Verificación de tickets</option><option value="tk_alm">Almacén</option><option value="cobranza">Cobranza</option><option value="rrhh">Talento Humano</option></select></label>
     <div class="err" id="uerr" hidden></div><div><button class="btn primary">Crear usuario</button></div></form>
   <div class="panel"><h3 style="margin-top:0">Reglas para crear un usuario</h3><ul style="padding-left:18px;line-height:1.7">
     <li>El nombre de usuario solo admite cifras numéricas: la <b>cédula</b>, que funciona como ID.</li>
@@ -1125,7 +1125,7 @@ const FORM = {
 };
 
 /* ============ Módulos 2 (TI) y 3 (Mantenimiento) ============ */
-const RL = { admin: 'Admin Biblioteca', admin_ti: 'Admin TI', admin_mant: 'Admin Mantenimiento', sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura', gerente_mant: 'Gerente de Mantenimiento', tk_crea: 'Atención al cliente (tickets)', tk_desp: 'Despacho', tk_ver: 'Verificación de tickets', tk_alm: 'Almacén', cobranza: 'Cobranza', rrhh: 'Recursos Humanos', user: 'Usuario' };
+const RL = { admin: 'Admin Biblioteca', admin_ti: 'Admin TI', admin_mant: 'Admin Mantenimiento', sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura', gerente_mant: 'Gerente de Mantenimiento', tk_crea: 'Atención al cliente (tickets)', tk_desp: 'Despacho', tk_ver: 'Verificación de tickets', tk_alm: 'Almacén', cobranza: 'Cobranza', rrhh: 'Talento Humano', user: 'Usuario' };
 const TI_CATS = ['Falla de impresora', 'Falta de tinta / tóner', 'Falta de papel', 'Caída de internet', 'Falla de computadora', 'Problema con el correo', 'Sin acceso a sistema o clave', 'Instalación de software', 'Teléfono / telefonía', 'Otro'];
 const URG = ['Baja', 'Media', 'Alta'];
 const places = () => [['General', ['Comedor', 'Recepción', 'Estacionamiento', 'Otro lugar']], ['Oficinas', S.depts.map(d => 'Oficina de ' + d)], ['Baños', S.depts.map(d => 'Baño de ' + d)]];
@@ -2248,7 +2248,7 @@ document.addEventListener('click', e => {
 }, true);
 document.addEventListener('submit', e => { const t = e.target.closest('[data-form]'); if (t) { e.preventDefault(); submitForm(t); } });
 
-/* ============ Almacén de TI (A2) · Asistencia de fin de semana (G1 → Recursos Humanos) ============ */
+/* ============ Almacén de TI (A2) · Asistencia de fin de semana (G1 → Talento Humano) ============ */
 const MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const DOWN = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const pad2 = n => String(n).padStart(2, '0');
@@ -2346,10 +2346,10 @@ function vGAsis() {
     const need = sups.length * 2; let done = 0; sups.forEach(u => ['s', 'd'].forEach(k => { if (aMark(w, u.id, k) !== null) done++; }));
     const rep = S.asisrh.find(x => x.id === repId(w)), sync = rep && repSame(w, rep), fut = w > todayISO();
     const chips = sups.map(u => `<span class="pill gray">${SH[u.role]} · Sáb ${mk1(aMark(w, u.id, 's'))} · Dom ${mk1(aMark(w, u.id, 'd'))}</span>`).join(' ');
-    const act = sync ? `<span class="pill ok">Enviado a Recursos Humanos · ${fmt(rep.upd)}</span>` : `${rep ? '<span class="pill warn">Cambió después del envío</span> ' : ''}<button class="btn ${done === need && need ? 'primary' : ''} sm" data-act="asend" data-w="${w}" ${fut || !need ? 'disabled' : ''}>${rep ? 'Reenviar corrección' : 'Enviar a Recursos Humanos'}</button>`;
+    const act = sync ? `<span class="pill ok">Enviado a Talento Humano · ${fmt(rep.upd)}</span>` : `${rep ? '<span class="pill warn">Cambió después del envío</span> ' : ''}<button class="btn ${done === need && need ? 'primary' : ''} sm" data-act="asend" data-w="${w}" ${fut || !need ? 'disabled' : ''}>${rep ? 'Reenviar corrección' : 'Enviar a Talento Humano'}</button>`;
     return `<div class="panel between" style="gap:10px;flex-wrap:wrap"><div><b>${wLabel(w)}</b><div class="small" style="margin:4px 0">Marcados ${done}/${need}</div><div class="row" style="flex-wrap:wrap;gap:6px">${chips}</div></div><div>${fut ? '<span class="muted">Aún no llega</span>' : act}</div></div>`;
   }).join('');
-  return `<div class="between"><div><h1>Asistencia de supervisores</h1><p class="sub">Toca el botón de cada supervisor en el sábado o domingo: <b>·</b> sin marcar → <b style="color:var(--ok)">✓ vino</b> → <b style="color:var(--danger)">✗ no vino</b> → sin marcar. Cuando termines el fin de semana, envíalo a Recursos Humanos.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
+  return `<div class="between"><div><h1>Asistencia de supervisores</h1><p class="sub">Toca el botón de cada supervisor en el sábado o domingo: <b>·</b> sin marcar → <b style="color:var(--ok)">✓ vino</b> → <b style="color:var(--danger)">✗ no vino</b> → sin marcar. Cuando termines el fin de semana, envíalo a Talento Humano.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
   ${sups.length ? `<div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:12px">${sups.map(u => `<span class="pill">${SH[u.role]} · ${esc(dn(u))} · ${esc(SUP[u.role])}</span>`).join('')}</div>` : '<div class="notice">No hay supervisores registrados.</div>'}
   <div class="panel"><div class="between" style="margin-bottom:10px"><div class="row"><button class="btn sm" data-act="asmonth" data-d="-1" aria-label="Mes anterior">‹</button><h2 style="margin:0;min-width:170px;text-align:center">${esc(monthT(ui.asm))}</h2><button class="btn sm" data-act="asmonth" data-d="1" aria-label="Mes siguiente">›</button></div><button class="btn sm" data-act="asmonth" data-d="0">Hoy</button></div>${asCal(ui.asm)}</div>
   <h2>Fines de semana de ${esc(monthT(ui.asm))}</h2><div class="stack" style="gap:10px">${wRows || '<div class="empty">Sin fines de semana.</div>'}</div>${asStats(sups)}`;
@@ -2369,18 +2369,18 @@ Object.assign(ACT, {
     const w = t.dataset.w, sups = supsAsis(); if (cur().role !== 'gerente_mant') return; if (!sups.length) return toast('No hay supervisores registrados');
     let miss = 0; sups.forEach(u => ['s', 'd'].forEach(k => { if (aMark(w, u.id, k) === null) miss++; }));
     if (miss) return toast('Faltan ' + miss + ' marca' + (miss === 1 ? '' : 's') + ' por completar en ese fin de semana');
-    askConfirm('¿Enviar a Recursos Humanos la asistencia del ' + wLabel(w) + '?', () => {
+    askConfirm('¿Enviar a Talento Humano la asistencia del ' + wLabel(w) + '?', () => {
       const g = cur(), now = Date.now(), prev = S.asisrh.find(x => x.id === repId(w));
       const rep = { id: repId(w), w, sun: isoD(addDays(fromISO(w), 1)), dept: g.dept || 'Mantenimiento', rows: sups.map(u => ({ id: u.id, name: dn(u), role: u.role, s: aMark(w, u.id, 's'), d: aMark(w, u.id, 'd') })), ts: prev ? prev.ts : now, upd: now, by: dn(g), n: (prev ? prev.n || 1 : 0) + 1 };
       if (prev) Object.assign(prev, rep); else S.asisrh.push(rep);
-      save(); toast('Asistencia enviada a Recursos Humanos'); render();
+      save(); toast('Asistencia enviada a Talento Humano'); render();
     }, 'Enviar');
   },
   rdp: t => { ui.rdp = t.dataset.d; render(); }
 });
 Object.assign(CHG, { asrange: t => { ui.asr = t.value; render(); }, rw: t => { ui.rw = t.value; render(); } });
 
-/* ---- Recursos Humanos: panel Asistencia por departamento ---- */
+/* ---- Talento Humano: panel Asistencia por departamento ---- */
 function vRAsis() {
   const reps = S.asisrh, ws = [...new Set([...reps.map(r => r.w), lastSat()])].sort().reverse(), w = ws.includes(ui.rw) ? ui.rw : ws[0];
   const depts = [...new Set([...S.depts, ...S.users.map(u => u.dept), ...reps.map(r => r.dept)])].filter(Boolean).sort((a, b) => a.localeCompare(b));
@@ -2400,7 +2400,7 @@ function vRAsis() {
 const fdate2 = s => { const d = fromISO(s); return d.getDate() + ' ' + MES[d.getMonth()].slice(0, 3); };
 function viewRH() {
   const u = cur(), v = ui.view;
-  return mShell('Recursos Humanos', [['rasis', 'Asistencia', 0], ['cuenta', 'Mi cuenta', 0]], v, isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : vRAsis(), u);
+  return mShell('Talento Humano', [['rasis', 'Asistencia', 0], ['cuenta', 'Mi cuenta', 0]], v, isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : vRAsis(), u);
 }
 
 (async () => { try { await enter(); } catch (e) { console.error(e); render(); } })();
