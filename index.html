@@ -288,6 +288,11 @@ th{border-bottom:2px solid var(--brand-red)}
 .dcard span{font-size:12px}
 .dcard.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 @media(max-width:640px){.cal{gap:3px}.cal-c{min-height:74px;padding:2px}.cal-chip{font-size:10px;padding:4px 0}}
+
+.steps{display:flex;gap:4px;flex-wrap:wrap}
+.stp{font-size:11px;padding:3px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.stp.done{background:var(--ok-weak);color:var(--ok);border-color:var(--ok)}
+.stp.cur{border-color:var(--accent);color:var(--accent);font-weight:700}
 </style>
 </head>
 <body>
@@ -1206,9 +1211,9 @@ function supTable(rs, mode) {
 
 function pcard(r, mode) {
   const p = r.pedido || {}, its = p.items || [];
-  const acts = mode === 'ger' ? (r.state === 'gerente' ? (p.menor ? `<button class="btn sm primary" data-act="gcob" data-id="${r.id}">Firmar y aprobar compra menor</button>` : `<button class="btn sm primary" data-act="gacept" data-id="${r.id}">Aceptar</button>`) : r.state === 'contaduria' ? `<button class="btn sm primary" data-act="gcob" data-id="${r.id}">Firmar y enviar a cobranza</button>` : '') : mode === 'cob' ? '' : r.state === 'pedido' ? `<button class="btn sm" data-act="sped" data-id="${r.id}">Editar planilla</button> <button class="btn sm primary" data-act="sger" data-id="${r.id}">Firmar y enviar al gerente de mantenimiento</button>` : '';
+  const acts = mode === 'ger' ? (r.state === 'gerente' ? (p.menor ? `<button class="btn sm primary" data-act="gcob" data-id="${r.id}">Firmar y aprobar compra menor</button>` : `<button class="btn sm primary" data-act="gacept" data-id="${r.id}">Aceptar</button>`) : r.state === 'contaduria' ? `<button class="btn sm primary" data-act="gcob" data-id="${r.id}">Firmar y enviar a cobranza</button>` : '') : mode === 'cob' ? cobBtns(r) : r.state === 'pedido' ? `<button class="btn sm" data-act="sped" data-id="${r.id}">Editar planilla</button> <button class="btn sm primary" data-act="sger" data-id="${r.id}">Firmar y enviar al gerente de mantenimiento</button>` : '';
   const chips = r.state === 'pedido' ? '' : `<div class="small">${p.firmaSup ? 'Firmada por ' + (SH[r.rrole] ? SH[r.rrole] : 'el supervisor') : 'Sin firma del supervisor'} · ${p.firmaGer ? 'Firmada por G1' : 'Sin firma del G1'}</div>`;
-  return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.rrole ? SUP[r.rrole] : 'Usuario'}</div></div>${stP('mant', r.state)}</div>${r.text ? `<div style="font-size:13px;white-space:pre-wrap">${esc(r.text)}</div>` : ''}<div class="muted" style="font-size:13px">${p.menor ? '<span class="pill warn">Compra menor</span> · ' + esc(p.unidad || '—') : (p.tipo === 'servicio' ? 'Servicio' : 'Compra') + ' · ' + esc(p.unidad || '—') + ' · Centro de costos: ' + esc(p.centro || '—')} · ${fmt(p.ts || r.ts)}</div><div style="font-size:13px">${its.slice(0, 4).map(x => '• ' + esc(x.desc) + ' — ' + esc(x.cant) + ' ' + esc(x.um)).join('<br>')}${its.length > 4 ? '<br>+' + (its.length - 4) + ' más' : ''}</div>${chips}<div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button><button class="btn sm" data-act="plpdf" data-id="${r.id}">Descargar PDF</button>${acts}</div></div>`;
+  return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.rrole ? SUP[r.rrole] : 'Usuario'}</div></div>${stP('mant', r.state)}</div>${r.text ? `<div style="font-size:13px;white-space:pre-wrap">${esc(r.text)}</div>` : ''}<div class="muted" style="font-size:13px">${p.menor ? '<span class="pill warn">Compra menor</span> · ' + esc(p.unidad || '—') : (p.tipo === 'servicio' ? 'Servicio' : 'Compra') + ' · ' + esc(p.unidad || '—') + ' · Centro de costos: ' + esc(p.centro || '—')} · ${fmt(p.ts || r.ts)}</div><div style="font-size:13px">${its.slice(0, 4).map(x => '• ' + esc(x.desc) + ' — ' + esc(x.cant) + ' ' + esc(x.um)).join('<br>')}${its.length > 4 ? '<br>+' + (its.length - 4) + ' más' : ''}</div>${chips}${cobLine(r)}<div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button><button class="btn sm" data-act="plpdf" data-id="${r.id}">Descargar PDF</button>${acts}</div></div>`;
 }
 function rcard(r) {
   return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.dept ? esc(r.dept) + ' · ' : ''}${r.rrole ? SUP[r.rrole] : (rolOf(r) || 'Usuario')}</div></div>${stP('mant', r.state)}</div><div style="font-size:13px;white-space:pre-wrap">${esc(r.text)}</div><div class="muted" style="font-size:13px">Enviada: ${fmt(r.ts)}${r.upd ? ' · Resuelta: ' + fmt(r.upd) : ''}</div>${resLine(r)}${r.pedido ? `<div class="row"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button></div>` : ''}</div>`;
@@ -1236,8 +1241,8 @@ function viewSup() {
   const mine = S.mant.filter(r => r.uid === u.id).sort((a, b) => b.ts - a.ts);
   const withP = [...inbox.filter(r => r.pedido && r.state !== 'terminada'), ...mine.filter(r => r.pedido)].sort((a, b) => (b.upd || b.ts) - (a.upd || a.ts));
   const pend = withP.filter(r => ['pedido', 'contaduria', 'cobranza'].includes(r.state)), aprob = withP.filter(r => r.state === 'gerente');
-  const nav = [['recv', 'Solicitudes recibidas', open.length], ['pend', 'Solicitudes pendientes', pend.filter(r => r.state === 'pedido').length], ['aprob', 'Pendientes por aprobar', aprob.length], ['mine', 'Mis solicitudes', 0], ['malm', 'Almacén de mantenimiento', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]];
-  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'stats' ? tiStats() : v === 'malm' ? vMalm() : v === 'aprob'
+  const nav = [['recv', 'Solicitudes recibidas', open.length], ['pend', 'Solicitudes pendientes', pend.filter(r => r.state === 'pedido').length], ['aprob', 'Pendientes por aprobar', aprob.length], ['pest', 'Estado de pedidos', 0], ['mine', 'Mis solicitudes', 0], ['malm', 'Almacén de mantenimiento', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]];
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'stats' ? tiStats() : v === 'malm' ? vMalm() : v === 'pest' ? vPEst() : v === 'aprob'
     ? `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido que enviaste al gerente de mantenimiento y esperan su aprobación.</p>${pgrid(aprob, 'sup', 'No tienes solicitudes pendientes por aprobar.')}` : v === 'pend'
     ? `<div class="between"><div><h1>Solicitudes pendientes</h1><p class="sub">Planillas de pedido por enviar al gerente de mantenimiento. Las aceptadas quedan aquí como <b>Por pasar a contaduría</b>. Con tu firma guardada, firmas y envías con un solo clic.</p></div><div class="row" style="flex-wrap:wrap">${sigAllBtn('sgerall', pend.filter(r => r.state === 'pedido'), 'Firmar y enviar todas al G1')}<button class="btn primary" data-act="pnew">Nueva solicitud de pedido</button></div></div>${pgrid(pend, 'sup', 'No hay solicitudes pendientes.')}`
     : v === 'mine'
@@ -1248,8 +1253,8 @@ function viewSup() {
 function viewGer() {
   const u = cur(), v = ui.view, all = S.mant.filter(r => r.pedido && ['gerente', 'contaduria', 'cobranza'].includes(r.state)).sort((a, b) => (b.cobTs || b.sent || b.ts) - (a.cobTs || a.sent || a.ts));
   const q = all.filter(r => r.state === 'gerente'), acc = all.filter(r => r.state === 'contaduria'), cob = all.filter(r => r.state === 'cobranza');
-  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'malm' ? vMalm() : v === 'fin' ? vFin() : v === 'stats' ? vG1Stats() : v === 'gasis' ? vGAsis() : v === 'gsup' ? vGSup() : v === 'gcob' ? `<h1>Enviadas a cobranza</h1><p class="sub">Solicitudes de pedido firmadas por ti que ya recibió cobranza.</p>${pgrid(cob, 'ger', 'Aún no has enviado solicitudes a cobranza.')}` : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste. Para enviarlas a cobranza debes <b>firmarlas</b>: sin tu firma no se pueden enviar. Con tu firma guardada basta un clic.</p>${sigAllBtn('gcoball', acc, 'Firmar y enviar todas a cobranza')}${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría. Las <b>compras menores</b> se aprueban con tu firma y pasan directo a cobranza.</p>${sigAllBtn('gcoball', q.filter(r => (r.pedido || {}).menor), 'Firmar y aprobar todas las compras menores')}${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
-  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', acc.length], ['gcob', 'Enviadas a cobranza', 0], ['malm', 'Almacén de mantenimiento', 0], ['fin', 'Control financiero de productos', 0], ['gsup', 'Supervisores', 0], ['gasis', 'Asistencia', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'malm' ? vMalm() : v === 'pest' ? vPEst() : v === 'fin' ? vFin() : v === 'stats' ? vG1Stats() : v === 'gasis' ? vGAsis() : v === 'gsup' ? vGSup() : v === 'gcob' ? `<h1>Enviadas a cobranza</h1><p class="sub">Solicitudes de pedido firmadas por ti que ya recibió cobranza.</p>${pgrid(cob, 'ger', 'Aún no has enviado solicitudes a cobranza.')}` : v === 'gacc' ? `<h1>Por pasar a contaduría</h1><p class="sub">Solicitudes de pedido que ya aceptaste. Para enviarlas a cobranza debes <b>firmarlas</b>: sin tu firma no se pueden enviar. Con tu firma guardada basta un clic.</p>${sigAllBtn('gcoball', acc, 'Firmar y enviar todas a cobranza')}${pgrid(acc, 'ger', 'Aún no has aceptado solicitudes.')}` : `<h1>Pendientes por aprobar</h1><p class="sub">Solicitudes de pedido enviadas por los supervisores. Revisa la planilla y acéptala para que quede por pasar a contaduría. Las <b>compras menores</b> se aprueban con tu firma y pasan directo a cobranza.</p>${sigAllBtn('gcoball', q.filter(r => (r.pedido || {}).menor), 'Firmar y aprobar todas las compras menores')}${pgrid(q, 'ger', 'No hay solicitudes por revisar.')}`;
+  return mShell('Gerencia de Mantenimiento', [['gq', 'Pendientes por aprobar', q.length], ['gacc', 'Por pasar a contaduría', acc.length], ['gcob', 'Enviadas a cobranza', 0], ['pest', 'Estado de pedidos', 0], ['malm', 'Almacén de mantenimiento', 0], ['fin', 'Control financiero de productos', 0], ['gsup', 'Supervisores', 0], ['gasis', 'Asistencia', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]], v, body, u);
 }
 let PNEW = null;
 function vGSup() {
@@ -1607,11 +1612,11 @@ function vTkNew() {
 function viewTK() {
   const u = cur(), role = u.role, N = TKN[role], v = (isU(ui.view) || N.some(x => x[0] === ui.view)) ? ui.view : N[0][0];
   const list = k => S.tk.filter(TKF[role][k] || (() => false)).sort((a, b) => b.ts - a.ts);
-  const cnt = k => ['por', 'cob', 'tk', 'dev'].includes(k) ? list(k).length : k === 'act' ? tkActive().length : k === 'ped' ? S.mant.filter(r => r.state === 'cobranza').length : 0;
+  const cnt = k => ['por', 'cob', 'tk', 'dev'].includes(k) ? list(k).length : k === 'act' ? tkActive().length : k === 'ped' ? S.mant.filter(r => r.state === 'cobranza' && !r.cobDec).length : 0;
   const nav = N.map(([k, l]) => [k, l, cnt(k)]);
   let body;
   if (isU(v)) body = uBody(); else if (v === 'cuenta') body = vCuenta(); else if (v === 'stats') body = tiStats(); else if (v === 'alm') body = vAlm(role); else if (v === 'act') body = vTkAct(); else if (v === 'nuevo') body = vTkNew();
-  else if (v === 'ped') body = `<div class="between"><div><h1>Pedidos de mantenimiento</h1><p class="sub">Solicitudes de pedido firmadas que envió el gerente de mantenimiento. Puedes ver y descargar cada planilla.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${pgrid(S.mant.filter(r => r.state === 'cobranza').sort((a, b) => (b.cobTs || b.ts) - (a.cobTs || a.ts)), 'cob', 'Aún no has recibido solicitudes de pedido.')}`;
+  else if (v === 'ped') body = `<div class="between"><div><h1>Pedidos de mantenimiento</h1><p class="sub">Solicitudes de pedido firmadas que envió el gerente de mantenimiento. Marca qué hacer con cada una: procesar, mantener en espera, devolver al solicitante o no procesar. G1, S1 y S2 ven tu decisión en tiempo real.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${cobStats()}${pgrid(S.mant.filter(r => r.state === 'cobranza').sort((a, b) => (b.cobTs || b.ts) - (a.cobTs || a.ts)), 'cob', 'Aún no has recibido solicitudes de pedido.')}`;
   else { const T = tkTitle(v, role); body = `<div class="between"><div><h1>${T[0]}</h1><p class="sub">${T[1]}</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${tkGrid(list(v), role, 'No hay tickets aquí.')}`; }
   return mShell(TKR[role], nav, v, body, u);
 }
@@ -1850,7 +1855,7 @@ function signSend(r) { r.pedido = r.pedido || {}; r.pedido.firmaSup = myFirma();
 function signCob(r) {
   const p = r.pedido = r.pedido || {}; if (!p.firmaSup) return false;
   p.firmaGer = myFirma(); if (!p.firmaGer || !p.firmaSup) return false;
-  r.state = 'cobranza'; r.cobTs = r.upd = Date.now(); r.cobBy = dn(cur()); return true;
+  r.state = 'cobranza'; r.cobTs = r.upd = Date.now(); r.cobBy = dn(cur()); r.cobDec = null; return true;
 }
 
 /* ---- Almacén de mantenimiento ---- */
@@ -2188,6 +2193,7 @@ function nItems() {
   if (u.role === 'admin_ti') S.ti.filter(r => r.state === 'pendiente').forEach(r => o.push(['ti|' + r.id, 'Nueva solicitud TI de ' + r.uname, r.cat + (r.dept ? ' · ' + r.dept : '')]));
   if (SUP[u.role] && supAreas(u).includes('infra')) S.mant.filter(r => r.state === 'enviada' && !r.rrole && (r.area || 'infra') === 'infra').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
   if (u.role === 'admin_mant') S.mant.filter(r => r.state === 'enviada').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
+  if (['sup_auto', 'sup_infra', 'gerente_mant'].includes(u.role)) S.mant.filter(r => r.pedido && r.cobDec && COBD[r.cobDec.k]).forEach(r => o.push(['cd|' + r.id + '|' + r.cobDec.ts, 'Cobranza: ' + COBD[r.cobDec.k][0], r.place + (r.cobDec.nota ? ' · ' + r.cobDec.nota : '')]));
   if (u.role === 'rrhh') S.asisrh.forEach(r => o.push(['as|' + r.id + '|' + r.upd, 'Asistencia del fin de semana recibida', r.dept + ' · ' + wLabel(r.w)]));
   return o;
 }
@@ -2402,6 +2408,45 @@ function viewRH() {
   const u = cur(), v = ui.view;
   return mShell('Talento Humano', [['rasis', 'Asistencia', 0], ['cuenta', 'Mi cuenta', 0]], v, isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : vRAsis(), u);
 }
+
+/* ============ Cobranza decide sobre cada solicitud de pedido · G1, S1 y S2 ven el estado en tiempo real ============ */
+const COBD = { procesar: ['Procesando', 'ok'], espera: ['En espera', 'warn'], devolver: ['Devuelta al solicitante', 'danger'], noprocesar: ['No procesada', 'danger'] };
+const COBB = [['procesar', 'Procesar', 'primary'], ['espera', 'Mantener en espera', ''], ['devolver', 'Devolver al solicitante', ''], ['noprocesar', 'No procesar', 'danger']];
+const cobShow = r => r.cobDec && COBD[r.cobDec.k] && (r.state === 'cobranza' || (r.state === 'pedido' && r.cobDec.k === 'devolver'));
+const cobLine = r => cobShow(r) ? `<div class="notice" style="font-size:13px"><span class="pill ${COBD[r.cobDec.k][1]}">${COBD[r.cobDec.k][0]}</span> <span class="muted">Cobranza · ${esc(r.cobDec.by || '')} · ${fmt(r.cobDec.ts)}</span>${r.cobDec.nota ? `<div style="white-space:pre-wrap;margin-top:4px">${esc(r.cobDec.nota)}</div>` : ''}</div>` : '';
+const cobBtns = r => r.state !== 'cobranza' ? '' : COBB.map(([k, l, c]) => `<button class="btn sm ${c}" data-act="cobdec" data-id="${r.id}" data-k="${k}" ${r.cobDec && r.cobDec.k === k ? 'disabled' : ''}>${l}</button>`).join(' ');
+const cobStats = () => { const rs = S.mant.filter(r => r.state === 'cobranza'), n = f => rs.filter(f).length; return `<div class="stats"><div class="stat"><b>${n(r => !r.cobDec)}</b><span>Sin decisión</span></div><div class="stat"><b>${n(r => r.cobDec && r.cobDec.k === 'procesar')}</b><span>Procesando</span></div><div class="stat"><b>${n(r => r.cobDec && r.cobDec.k === 'espera')}</b><span>En espera</span></div><div class="stat"><b>${n(r => r.cobDec && r.cobDec.k === 'noprocesar')}</b><span>No procesadas</span></div></div>`; };
+Object.assign(ACT, {
+  cobdec: t => {
+    const r = S.mant.find(x => x.id === t.dataset.id), k = t.dataset.k; if (!r || cur().role !== 'cobranza' || r.state !== 'cobranza' || !COBD[k]) return;
+    const req = k === 'devolver' || k === 'noprocesar', T = { procesar: 'Procesar solicitud de pedido', espera: 'Mantener en espera', devolver: 'Devolver al solicitante', noprocesar: 'No procesar' }[k];
+    openModal(`<div class="modal" style="max-width:460px"><form data-form="cobdec" data-id="${r.id}" data-k="${k}"><div class="modal-h"><h2 style="margin:0">${T}</h2></div><div class="modal-b stack"><div class="muted">${esc(r.place)} · ${esc(unm(r))}</div>${k === 'devolver' ? '<div class="small">La planilla vuelve al supervisor como pendiente, sin firmas, para que la corrija y la firme de nuevo.</div>' : ''}<label>${k === 'devolver' ? 'Motivo de la devolución' : k === 'noprocesar' ? 'Motivo' : 'Nota'}${req ? '' : ' (opcional)'}<textarea name="n" rows="3" ${req ? 'required' : ''}></textarea></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn ${k === 'noprocesar' ? 'danger' : 'primary'}">Confirmar</button></div></form></div>`);
+  }
+});
+FORM.cobdec = f => {
+  const r = S.mant.find(x => x.id === f.dataset.id), k = f.dataset.k, u = cur();
+  if (!r || u.role !== 'cobranza' || r.state !== 'cobranza' || !COBD[k]) return;
+  const nota = f.n.value.trim(); if ((k === 'devolver' || k === 'noprocesar') && !nota) return toast('Escribe el motivo');
+  const now = Date.now(), d = { k, nota, ts: now, by: dn(u) };
+  r.cobLog = (r.cobLog || []).concat([d]); r.cobDec = d; r.upd = now;
+  if (k === 'devolver') { r.state = 'pedido'; const p = r.pedido = r.pedido || {}; delete p.firmaSup; delete p.firmaGer; }
+  save(); closeModal(); toast(k === 'devolver' ? 'Devuelta al solicitante' : 'Decisión registrada: ' + COBD[k][0]); render();
+};
+
+/* ---- Panel "Estado de pedidos" (G1, S1, S2) ---- */
+const PK = { enviar: ['Por enviar al G1', 'gray'], gerente: ['Por aprobar (G1)', 'warn'], conta: ['Por pasar a contaduría', 'warn'], sindec: ['En cobranza · esperando decisión', 'warn'], procesar: ['Procesando', 'ok'], espera: ['En espera', 'warn'], devolver: ['Devuelta al solicitante', 'danger'], noprocesar: ['No procesada', 'danger'] };
+const pKey = r => r.state === 'cobranza' ? (r.cobDec ? r.cobDec.k : 'sindec') : r.state === 'pedido' ? (r.cobDec && r.cobDec.k === 'devolver' ? 'devolver' : 'enviar') : r.state === 'gerente' ? 'gerente' : 'conta';
+const pStep = r => { const i = { pedido: 0, gerente: 1, contaduria: 2, cobranza: 3 }[r.state] || 0; return `<div class="steps">${['Supervisor', 'G1', 'Contaduría', 'Cobranza'].map((l, j) => `<span class="stp ${j < i ? 'done' : j === i ? 'cur' : ''}">${l}</span>`).join('')}</div>`; };
+function vPEst() {
+  const all = S.mant.filter(r => r.pedido && (r.pedido.items || []).length && ['pedido', 'gerente', 'contaduria', 'cobranza'].includes(r.state)).sort((a, b) => (b.upd || b.ts) - (a.upd || a.ts));
+  const f = ui.pf && PK[ui.pf] ? ui.pf : '', rs = f ? all.filter(r => pKey(r) === f) : all, cnt = k => all.filter(r => pKey(r) === k).length;
+  const sel = `<select data-chg="pf" style="width:auto;min-width:220px"><option value="">Todos los estados (${all.length})</option>${Object.entries(PK).map(([k, v]) => `<option value="${k}" ${f === k ? 'selected' : ''}>${v[0]} (${cnt(k)})</option>`).join('')}</select>`;
+  const card = r => { const p = r.pedido || {}; return `<div class="panel stack"><div class="between"><div><b>${esc(r.place)}</b><div class="small">${esc(unm(r))} · ${r.rrole ? SUP[r.rrole] : 'Usuario'} · ${fmt(p.ts || r.ts)}</div></div><span class="pill ${PK[pKey(r)][1]}">${PK[pKey(r)][0]}</span></div>${(p.items || []).length ? `<div style="font-size:13px">${p.items.slice(0, 3).map(x => '• ' + esc(x.desc) + ' — ' + esc(x.cant) + ' ' + esc(x.um)).join('<br>')}${p.items.length > 3 ? '<br>+' + (p.items.length - 3) + ' más' : ''}</div>` : ''}${pStep(r)}${cobLine(r)}<div class="row"><button class="btn sm" data-act="sped" data-id="${r.id}" data-ro="1">Ver planilla</button></div></div>`; };
+  return `<div class="between"><div><h1>Estado de pedidos</h1><p class="sub">Seguimiento en tiempo real de las solicitudes de pedido: en qué etapa están y qué decidió Cobranza (procesar, mantener en espera, devolver al solicitante o no procesar). Se actualiza solo.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
+  <div class="stats"><div class="stat"><b>${cnt('enviar') + cnt('gerente') + cnt('conta')}</b><span>En trámite</span></div><div class="stat"><b>${cnt('sindec')}</b><span>En cobranza</span></div><div class="stat"><b>${cnt('procesar')}</b><span>Procesando</span></div><div class="stat"><b>${cnt('espera')}</b><span>En espera</span></div><div class="stat"><b>${cnt('devolver')}</b><span>Devueltas</span></div><div class="stat"><b>${cnt('noprocesar')}</b><span>No procesadas</span></div></div>
+  <div class="row" style="margin:0 0 12px">${sel}</div>${rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(card).join('')}</div>` : '<div class="tw"><div class="empty">No hay solicitudes de pedido en este estado.</div></div>'}`;
+}
+Object.assign(CHG, { pf: t => { ui.pf = t.value; render(); } });
 
 (async () => { try { await enter(); } catch (e) { console.error(e); render(); } })();
 </script>
