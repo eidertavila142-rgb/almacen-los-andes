@@ -293,6 +293,16 @@ th{border-bottom:2px solid var(--brand-red)}
 .stp{font-size:11px;padding:3px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
 .stp.done{background:var(--ok-weak);color:var(--ok);border-color:var(--ok)}
 .stp.cur{border-color:var(--accent);color:var(--accent);font-weight:700}
+
+.sd{display:flex;flex-direction:column;gap:8px;font-size:14px}
+.sd-h{font-weight:700;margin-top:6px;border-bottom:2px solid var(--line);padding-bottom:3px}
+.sd-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.sd-f{background:var(--surface-2,rgba(128,128,128,.12));border-radius:8px;padding:6px 9px}
+.sd-f span{display:block;font-size:11px;font-style:italic;color:var(--muted)}
+.sd-f div{white-space:pre-wrap;min-height:18px}
+.sd-types{display:flex;flex-wrap:wrap;gap:6px 18px}
+.sd-ck.on{font-weight:700}
+.sd-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
 </style>
 </head>
 <body>
@@ -327,9 +337,9 @@ let idleT; const IDLE_MS = 15 * 60 * 1000;
 const idleReset = () => { clearTimeout(idleT); idleT = setTimeout(() => { if (ui.user) { ACT.logout(); toast('Sesión cerrada por inactividad'); } }, IDLE_MS); };
 ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev => document.addEventListener(ev, idleReset, { passive: true })); idleReset();
 const EMAIL = n => 'almacen.' + String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') + '@gmail.com';
-let S = { users: [], depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], tstock: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
+let S = { users: [], depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], tstock: [], sdoc: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
 let SNAP = {};
-const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), tk: () => S.tk, stock: () => S.stock, mstock: () => S.mstock, tstock: () => S.tstock, asis: () => S.asis, asisrh: () => S.asisrh, fin: () => S.fin, firmas: () => S.firmas, sdeleg: () => S.sdeleg, ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
+const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), tk: () => S.tk, stock: () => S.stock, mstock: () => S.mstock, tstock: () => S.tstock, sdoc: () => S.sdoc, asis: () => S.asis, asisrh: () => S.asisrh, fin: () => S.fin, firmas: () => S.firmas, sdeleg: () => S.sdeleg, ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
 function snapNow() {
   const m = {};
   for (const c in COLL) for (const x of COLL[c]()) m[c + '|' + x.id] = JSON.stringify(x);
@@ -364,7 +374,7 @@ function save() {
 async function loadAll() {
   const [p, it] = await Promise.all([SB.from('profiles').select('*'), SB.from('items').select('coll,id,data').limit(5000)]);
   if (p.error || it.error) throw (p.error || it.error);
-  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], tstock: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
+  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], tstock: [], sdoc: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
   const UC = {}; for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'cargos') S.cargos.push(r.data.n); else if (r.coll === 'ucargo') UC[r.id] = r.data.cargo; else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (S[r.coll]) S[r.coll].push(r.data); }
   S.users.forEach(u => { u.cargo = UC[u.id] || ''; });
   SNAP = snapNow();
@@ -522,11 +532,11 @@ function viewAuth() {
 /* ============ Panel del administrador ============ */
 function viewAdmin() {
   const unread = S.msgs.filter(m => !m.read).length;
-  const nav = [['resumen','Resumen'],['docs','Documentos'],['subir','Subir documento'],['users','Usuarios'],['newu','Crear usuario'],['mail','Enviar correo'],['depts','Departamentos'],['cargos','Cargos'],['trash','Papelera'],['archive','Archivo'],['log','Historial'],['msgs','Mensajes'],['cuenta','Mi cuenta']];
-  const V = { resumen: vResumen, docs: vDocs, subir: vSubir, users: vUsers, newu: vNewU, mail: vMail, depts: vDepts, cargos: vCargos, trash: vTrash, archive: vArchive, log: vLog, msgs: vMsgs, cuenta: vCuenta };
+  const nav = [['resumen','Resumen'],['docs','Documentos'],['sdoc','Solicitudes de documentos'],['subir','Subir documento'],['users','Usuarios'],['newu','Crear usuario'],['mail','Enviar correo'],['depts','Departamentos'],['cargos','Cargos'],['trash','Papelera'],['archive','Archivo'],['log','Historial'],['msgs','Mensajes'],['cuenta','Mi cuenta']];
+  const V = { resumen: vResumen, docs: vDocs, sdoc: vASdoc, subir: vSubir, users: vUsers, newu: vNewU, mail: vMail, depts: vDepts, cargos: vCargos, trash: vTrash, archive: vArchive, log: vLog, msgs: vMsgs, cuenta: vCuenta };
   return `<div class="shell"><aside>
     <div class="brand">${I.logo} <span>GilApp</span></div>
-    <nav>${nav.map(([k, l]) => `<button data-act="nav" data-v="${k}" class="${ui.view === k ? 'on' : ''}">${l}${k === 'msgs' && unread ? `<span class="badge">${unread}</span>` : ''}</button>`).join('')}</nav>
+    <nav>${nav.map(([k, l]) => `<button data-act="nav" data-v="${k}" class="${ui.view === k ? 'on' : ''}">${l}${k === 'msgs' && unread ? `<span class="badge">${unread}</span>` : ''}${k === 'sdoc' && sdPend() ? `<span class="badge">${sdPend()}</span>` : ''}</button>`).join('')}</nav>
     <div class="aside-foot"><div class="company">Ganadería Industrial Los Andes, C.A.</div><div style="font-weight:600">${esc(dn(cur()))}</div><div class="muted" style="font-size:12px;margin-bottom:6px">Administrador · Biblioteca</div><button class="link" data-act="logout">Cerrar sesión</button></div>
   </aside><main>${V[ui.view]()}</main></div>`;
 }
@@ -847,9 +857,9 @@ function viewUser() {
   const u = cur();
   const nav = [['history', 'Historial'], ['mail', 'Correos'], ['contact', 'Contactar al administrador']];
   const active = ui.uview.startsWith('folder') ? 'lib' : ui.uview;
-  const inMod = ['lib', 'ti', 'mant'].includes(active);
+  const inMod = ['lib', 'ti', 'mant', 'sdoc'].includes(active);
   const back = active === 'desk' ? '' : '<button class="btn sm" data-act="unav" data-v="desk">← Regresa al comienzo</button>';
-  const V = ui.uview.startsWith('folder') ? uFolder : ui.uview === 'history' ? uHistory : ui.uview === 'contact' ? uContact : ui.uview === 'mail' ? uMail : ui.uview === 'lib' ? uLib : ui.uview === 'ti' ? uTI : ui.uview === 'mant' ? uMant : uDesk;
+  const V = ui.uview.startsWith('folder') ? uFolder : ui.uview === 'history' ? uHistory : ui.uview === 'contact' ? uContact : ui.uview === 'mail' ? uMail : ui.uview === 'lib' ? uLib : ui.uview === 'ti' ? uTI : ui.uview === 'mant' ? uMant : ui.uview === 'sdoc' ? uSdoc : uDesk;
   return `<div class="top"><div class="brand">${I.logo} <span>GilApp</span></div>
     ${back}${inMod ? '' : `<nav>${nav.map(([k, l]) => `<button data-act="unav" data-v="${k}" class="${active === k ? 'on' : ''}">${l}</button>`).join('')}</nav>`}
     <div class="right row"><span class="muted">${esc(dn(u))} · ${esc(u.dept) || 'Sin departamento'}</span><button class="btn sm" data-act="logout">Salir</button></div></div>
@@ -1169,8 +1179,8 @@ function uReq(k) {
 }
 const uTI = () => uReq('ti'), uMant = () => uReq('mant');
 function uDesk() {
-  const u = cur(), open = k => S[k].filter(r => r.uid === u.id && !['aprobada', 'aceptada', 'cerrada'].includes(r.state) && !(k === 'mant' && r.state === 'terminada')).length;
-  const mods = [['lib', 'Biblioteca GILACA', 'Documentos públicos, tuyos y de tu departamento', I.globe], ['ti', 'Solicitudes TI', 'Impresora, internet, tinta, papel y más', I.pc], ['mant', 'Solicitudes de mantenimiento', 'Oficinas, comedor, baños y otros lugares', I.wrench]];
+  const u = cur(), open = k => k === 'sdoc' ? S.sdoc.filter(r => r.uid === u.id && r.state === 'pendiente').length : S[k].filter(r => r.uid === u.id && !['aprobada', 'aceptada', 'cerrada'].includes(r.state) && !(k === 'mant' && r.state === 'terminada')).length;
+  const mods = [['lib', 'Biblioteca GILACA', 'Documentos públicos, tuyos y de tu departamento', I.globe], ['ti', 'Solicitudes TI', 'Impresora, internet, tinta, papel y más', I.pc], ['mant', 'Solicitudes de mantenimiento', 'Oficinas, comedor, baños y otros lugares', I.wrench], ['sdoc', 'Solicitar documento', 'Elaborar, actualizar o desincorporar un documento', I.globe]];
   return `<h1>Inicio</h1><p class="sub">Elige un módulo.</p><div class="folders">${mods.map(([k, t, s, ic]) => `<button class="folder" data-act="unav" data-v="${k}">${ic}<b>${t}</b><span>${s}${k !== 'lib' && open(k) ? ' · ' + open(k) + ' en curso' : ''}</span></button>`).join('')}</div>`;
 }
 function viewAdminMod(k) {
@@ -1222,8 +1232,8 @@ const rgrid = (rs, empty) => rs.length ? `<div style="display:grid;grid-template
 const pgrid = (rs, mode, empty) => rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(r => pcard(r, mode)).join('')}</div>` : `<div class="tw"><div class="empty">${empty}</div></div>`;
 const isU = v => String(v).startsWith('u:');
 const ukey = () => (ui.uview || 'lib').startsWith('folder') ? 'lib' : (ui.uview || 'lib');
-const uBody = () => { const uv = ui.uview || 'lib'; return (uv.startsWith('folder') ? uFolder : uv === 'history' ? uHistory : uv === 'contact' ? uContact : uv === 'mail' ? uMail : uv === 'ti' ? uTI : uv === 'mant' ? uMant : uLib)(); };
-const UG = u => { const bib = ['Biblioteca', [['lib', 'Biblioteca GILACA'], ['history', 'Historial'], ['mail', 'Correos'], ['contact', 'Contactar al administrador']]]; const maG = ['Solicitud mantenimiento', [['mant', 'Mis solicitudes de mantenimiento']]], tiG = ['Solicitud tecnología', [['ti', 'Mis solicitudes a TI']]]; return u.role === 'rrhh' ? [bib, tiG, maG] : [bib, u.role === 'admin_ti' ? maG : tiG]; };
+const uBody = () => { const uv = ui.uview || 'lib'; return (uv.startsWith('folder') ? uFolder : uv === 'history' ? uHistory : uv === 'contact' ? uContact : uv === 'mail' ? uMail : uv === 'ti' ? uTI : uv === 'mant' ? uMant : uv === 'sdoc' ? uSdoc : uLib)(); };
+const UG = u => { const bib = ['Biblioteca', [['lib', 'Biblioteca GILACA'], ['history', 'Historial'], ['mail', 'Correos'], ['sdoc', 'Solicitar documento'], ['contact', 'Contactar al administrador']]]; const maG = ['Solicitud mantenimiento', [['mant', 'Mis solicitudes de mantenimiento']]], tiG = ['Solicitud tecnología', [['ti', 'Mis solicitudes a TI']]]; return u.role === 'rrhh' ? [bib, tiG, maG] : [bib, u.role === 'admin_ti' ? maG : tiG]; };
 const rolOf = r => RL[(S.users.find(x => x.id === r.uid) || {}).role] || '';
 function mShell(brand, nav, v, body, u) {
   const g = ui.grp || {}, inU = isU(v);
@@ -2193,6 +2203,8 @@ function nItems() {
   if (u.role === 'admin_ti') S.ti.filter(r => r.state === 'pendiente').forEach(r => o.push(['ti|' + r.id, 'Nueva solicitud TI de ' + r.uname, r.cat + (r.dept ? ' · ' + r.dept : '')]));
   if (SUP[u.role] && supAreas(u).includes('infra')) S.mant.filter(r => r.state === 'enviada' && !r.rrole && (r.area || 'infra') === 'infra').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
   if (u.role === 'admin_mant') S.mant.filter(r => r.state === 'enviada').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
+  if (u.role === 'admin') S.sdoc.filter(r => r.state === 'pendiente').forEach(r => o.push(['sd|' + r.id, 'Nueva solicitud de documento de ' + unm(r), SDT[r.tipo] + ' · ' + ((r.doc || {}).nombre || '')]));
+  S.sdoc.filter(r => r.uid === u.id && r.rec).forEach(r => o.push(['sr|' + r.id + '|' + r.rec.ts, 'Tu solicitud de documento fue ' + (r.state === 'aprobada' ? 'aprobada' : 'rechazada'), ((r.doc || {}).nombre || '') + (r.rec.concl ? ' · ' + r.rec.concl : '')]));
   if (['sup_auto', 'sup_infra', 'gerente_mant'].includes(u.role)) S.mant.filter(r => r.pedido && r.cobDec && COBD[r.cobDec.k]).forEach(r => o.push(['cd|' + r.id + '|' + r.cobDec.ts, 'Cobranza: ' + COBD[r.cobDec.k][0], r.place + (r.cobDec.nota ? ' · ' + r.cobDec.nota : '')]));
   if (u.role === 'rrhh') S.asisrh.forEach(r => o.push(['as|' + r.id + '|' + r.upd, 'Asistencia del fin de semana recibida', r.dept + ' · ' + wLabel(r.w)]));
   return o;
@@ -2230,7 +2242,7 @@ async function liveRefresh() {
   if (!u || (u.role === 'admin' && ui.view === 'subir')) return;
   const typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
   try { await chain; await loadAll(); notifyScan(); } catch (e) { return; }
-  const live = u.role === 'admin' ? ['resumen', 'msgs', 'docs'].includes(ui.view) : u.role === 'user' ? (ui.uview.startsWith('folder') || ['desk', 'lib', 'ti', 'mant', 'mail'].includes(ui.uview)) : !['cuenta', 'nuevo'].includes(ui.view);
+  const live = u.role === 'admin' ? ['resumen', 'msgs', 'docs', 'sdoc'].includes(ui.view) : u.role === 'user' ? (ui.uview.startsWith('folder') || ['desk', 'lib', 'ti', 'mant', 'mail', 'sdoc'].includes(ui.uview)) : !['cuenta', 'nuevo'].includes(ui.view);
   if (!typing && live && !$('#modal').innerHTML) render();
 }
 function rtStart() {
@@ -2447,6 +2459,101 @@ function vPEst() {
   <div class="row" style="margin:0 0 12px">${sel}</div>${rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(card).join('')}</div>` : '<div class="tw"><div class="empty">No hay solicitudes de pedido en este estado.</div></div>'}`;
 }
 Object.assign(CHG, { pf: t => { ui.pf = t.value; render(); } });
+
+/* ============ Planilla F-OYP-01 · Solicitud de elaboración, actualización o desincorporación de documentos ============ */
+const SDT = { elaboracion: 'Elaboración', actualizacion: 'Actualización', modificacion: 'Modificación', desincorporacion: 'Desincorporación' };
+const SDS = { pendiente: ['Pendiente', 'warn'], aprobada: ['Aprobada', 'ok'], rechazada: ['Rechazada', 'danger'] };
+const sdPend = () => S.sdoc.filter(r => r.state === 'pendiente').length;
+const splitName = u => { const t = (u.full || '').trim().split(/\s+/).filter(Boolean); if (t.length < 2) return [t[0] || '', '']; const h = Math.ceil(t.length / 2); return [t.slice(0, h).join(' '), t.slice(h).join(' ')]; };
+const sdBox = (k, v) => `<div class="sd-f"><span>${k}</span><div>${v ? esc(v) : '<span class="muted">—</span>'}</div></div>`;
+function sdSheet(r) {
+  const s = r.sol || {}, d = r.doc || {}, c = r.rec;
+  return `<div class="sd"><div class="sd-h">Responsable de la solicitud</div>
+  <div class="sd-g">${sdBox('Nombre', s.nombre)}${sdBox('Apellido', s.apellido)}${sdBox('Cargo', s.cargo)}${sdBox('Teléfono', s.tel)}${sdBox('Fecha', s.fecha)}</div>
+  <div class="sd-h">Solicitud</div><div class="sd-types">${Object.entries(SDT).map(([k, l]) => `<span class="sd-ck ${r.tipo === k ? 'on' : ''}">${r.tipo === k ? '☑' : '☐'} ${l}</span>`).join('')}</div>
+  <div class="sd-g">${sdBox('Código', d.codigo)}${sdBox('Revisión', d.rev)}${sdBox('Documento afectado · Nombre', d.nombre)}</div>
+  <div class="sd-h">Justificación</div>${sdBox('Aspectos a modificar', r.aspectos)}${sdBox('Detalles de la propuesta', r.detalles)}
+  ${c ? `<div class="sd-h">Recepción · Organización y Procesos</div>${sdBox('Evaluación (sobre la solicitud)', c.evalu)}${sdBox('Conclusión', c.concl)}<div class="sd-types"><span class="sd-ck">${c.res === 'aprobada' ? '☑' : '☐'} Aprobada</span><span class="sd-ck">${c.res === 'rechazada' ? '☑' : '☐'} Rechazada</span></div><div class="sd-g">${sdBox('Nombre', c.nombre)}${sdBox('Apellido', c.apellido)}${sdBox('Cargo', c.cargo)}${sdBox('Fecha', c.fecha)}</div>` : ''}</div>`;
+}
+
+/* ---- Panel del solicitante (todos los roles) ---- */
+function uSdoc() {
+  const u = cur(), [n0, a0] = splitName(u), hoy = todayISO(), mine = S.sdoc.filter(r => r.uid === u.id).sort((a, b) => b.ts - a.ts);
+  const list = mine.map(r => `<div class="panel stack"><div class="between"><div><b>${esc((r.doc || {}).nombre || '')}</b><div class="small">${r.no} · ${SDT[r.tipo]} · enviada ${fmt(r.ts)}</div></div><span class="pill ${SDS[r.state][1]}">${SDS[r.state][0]}</span></div>${r.rec ? `<div class="notice" style="font-size:13px"><b>Respuesta de la biblioteca</b> · ${esc(r.rec.nombre)} ${esc(r.rec.apellido)} · ${esc(r.rec.fecha)}${r.rec.evalu ? `<div style="white-space:pre-wrap;margin-top:4px"><i>Evaluación:</i> ${esc(r.rec.evalu)}</div>` : ''}<div style="white-space:pre-wrap;margin-top:4px"><i>Conclusión:</i> ${esc(r.rec.concl)}</div></div>` : '<div class="muted" style="font-size:13px">Esperando la respuesta del administrador de la biblioteca.</div>'}<div class="row"><button class="btn sm" data-act="sdview" data-id="${r.id}">Ver planilla</button><button class="btn sm" data-act="sdpdf" data-id="${r.id}">Descargar PDF</button></div></div>`).join('');
+  return `<h1>Solicitar documento a la biblioteca</h1><p class="sub">Planilla GILACA-F-OYP-01. Pide la elaboración, actualización, modificación o desincorporación de un documento. La recibe el administrador de la biblioteca (Organización y Procesos), la aprueba o rechaza y el resultado te llega aquí.</p>
+  <form data-form="sdocnew" class="panel stack" style="max-width:900px"><h3 style="margin:0">Responsable de la solicitud</h3>
+  <div class="sd-form"><label>Nombre<input name="nombre" value="${esc(n0)}" required></label><label>Apellido<input name="apellido" value="${esc(a0)}" required></label><label>Cargo<input name="cargo" value="${esc(u.cargo || '')}" required></label><label>Teléfono<input name="tel" type="tel" placeholder="0414-0000000"></label><label>Fecha<input name="fecha" type="date" value="${hoy}" max="${hoy}" required></label></div>
+  <h3 style="margin:8px 0 0">Solicitud</h3><div class="row" style="flex-wrap:wrap;gap:16px">${Object.entries(SDT).map(([k, l]) => `<label class="row" style="gap:6px"><input type="radio" name="tipo" value="${k}" required> ${l}</label>`).join('')}</div>
+  <h3 style="margin:8px 0 0">Documento afectado</h3><div class="small" style="margin-top:-6px">Para elaborar un documento nuevo solo indica el nombre.</div>
+  <div class="sd-form"><label>Código<input name="codigo"></label><label>Revisión<input name="rev"></label><label style="grid-column:span 2">Nombre del documento<input name="dnom" required></label></div>
+  <h3 style="margin:8px 0 0">Justificación</h3><label>Aspectos a modificar<textarea name="aspectos" rows="3"></textarea></label><label>Detalles de la propuesta<textarea name="detalles" rows="4" required></textarea></label>
+  <div><button class="btn primary">Enviar solicitud a la biblioteca</button></div></form>
+  <h2 style="margin-top:26px">Mis solicitudes</h2>${list ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px">${list}</div>` : '<div class="tw"><div class="empty">Aún no has enviado solicitudes de documentos.</div></div>'}`;
+}
+FORM.sdocnew = f => {
+  const u = cur(), g = n => f[n].value.trim(), tipo = f.tipo.value;
+  if (!tipo) return toast('Elige el tipo de solicitud');
+  if (!g('dnom') || !g('detalles')) return toast('Indica el nombre del documento y los detalles de la propuesta');
+  if ((tipo === 'actualizacion' || tipo === 'modificacion') && !g('aspectos')) return toast('Indica los aspectos a modificar');
+  const now = Date.now();
+  S.sdoc.push({ id: uid(), no: 'SD-' + now.toString(36).slice(-5).toUpperCase(), uid: u.id, uname: dn(u), dept: u.dept || '', ts: now, upd: now, state: 'pendiente', sol: { nombre: g('nombre'), apellido: g('apellido'), cargo: g('cargo'), tel: g('tel'), fecha: g('fecha') }, tipo, doc: { codigo: g('codigo'), rev: g('rev'), nombre: g('dnom') }, aspectos: g('aspectos'), detalles: g('detalles'), rec: null });
+  save(); toast('Solicitud enviada a la biblioteca'); render();
+};
+
+/* ---- Bandeja del administrador de la biblioteca ---- */
+function vASdoc() {
+  const f = ui.sdf || 'pendiente', all = S.sdoc.slice().sort((a, b) => b.ts - a.ts), rs = f === 'todas' ? all : all.filter(r => r.state === f), n = k => all.filter(r => r.state === k).length;
+  return `<div class="between"><div><h1>Solicitudes de documentos</h1><p class="sub">Planillas F-OYP-01 enviadas por los usuarios. Apruébalas o recházalas: el resultado le llega al solicitante.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
+  <div class="stats"><div class="stat"><b>${n('pendiente')}</b><span>Pendientes</span></div><div class="stat"><b>${n('aprobada')}</b><span>Aprobadas</span></div><div class="stat"><b>${n('rechazada')}</b><span>Rechazadas</span></div></div>
+  <div class="row" style="margin:0 0 12px"><select data-chg="sdf" style="width:auto;min-width:200px">${[['pendiente', 'Pendientes'], ['aprobada', 'Aprobadas'], ['rechazada', 'Rechazadas'], ['todas', 'Todas']].map(([k, l]) => `<option value="${k}" ${f === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+  <div class="tw"><table><thead><tr><th>N.º</th><th>Solicitante</th><th>Solicitud</th><th>Documento</th><th>Enviada</th><th>Estado</th><th></th></tr></thead><tbody>${rs.map(r => `<tr><td class="mono">${r.no}</td><td><b>${esc(unm(r))}</b><div class="small">${esc(r.dept || '')}</div></td><td>${SDT[r.tipo]}</td><td>${esc((r.doc || {}).nombre || '')}</td><td class="muted">${fmt(r.ts)}</td><td><span class="pill ${SDS[r.state][1]}">${SDS[r.state][0]}</span></td><td style="text-align:right;white-space:nowrap"><button class="btn sm ${r.state === 'pendiente' ? 'primary' : ''}" data-act="sdrev" data-id="${r.id}">${r.state === 'pendiente' ? 'Revisar' : 'Ver'}</button> <button class="btn sm" data-act="sdpdf" data-id="${r.id}">PDF</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">No hay solicitudes en este estado.</td></tr>'}</tbody></table></div>`;
+}
+Object.assign(CHG, { sdf: t => { ui.sdf = t.value; render(); } });
+Object.assign(ACT, {
+  sdview: t => { const r = S.sdoc.find(x => x.id === t.dataset.id); if (!r) return; openModal(`<div class="modal" style="max-width:780px"><div class="modal-h"><h2 style="margin:0">Solicitud ${r.no} · <span class="pill ${SDS[r.state][1]}">${SDS[r.state][0]}</span></h2></div><div class="modal-b">${sdSheet(r)}</div><div class="modal-f"><button class="btn" data-act="sdpdf" data-id="${r.id}">Descargar PDF</button><button class="btn primary" data-act="close">Cerrar</button></div></div>`); },
+  sdrev: t => {
+    const r = S.sdoc.find(x => x.id === t.dataset.id), u = cur(); if (!r) return;
+    if (r.state !== 'pendiente') return ACT.sdview(t);
+    const [n0, a0] = splitName(u);
+    openModal(`<div class="modal" style="max-width:780px"><form data-form="sdnone"><div class="modal-h"><h2 style="margin:0">Revisar solicitud ${r.no}</h2><div class="small">De ${esc(unm(r))}${r.dept ? ' · ' + esc(r.dept) : ''}</div></div><div class="modal-b stack">${sdSheet(r)}<h3 style="margin:8px 0 0">Recepción · Organización y Procesos</h3><label>Evaluación (sobre la solicitud)<textarea name="evalu" rows="3"></textarea></label><label>Conclusión<textarea name="concl" rows="3" required></textarea></label><div class="sd-form"><label>Nombre<input name="nombre" value="${esc(n0)}" required></label><label>Apellido<input name="apellido" value="${esc(a0)}" required></label><label>Cargo<input name="cargo" value="${esc(u.cargo || 'Administrador de Biblioteca')}"></label><label>Fecha<input name="fecha" type="date" value="${todayISO()}"></label></div></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button type="button" class="btn danger" data-act="sdres" data-k="rechazada" data-id="${r.id}">Rechazar</button><button type="button" class="btn primary" data-act="sdres" data-k="aprobada" data-id="${r.id}">Aprobar</button></div></form></div>`);
+  },
+  sdres: t => {
+    const u = cur(), r = S.sdoc.find(x => x.id === t.dataset.id), f = t.closest('form'), k = t.dataset.k; if (!r || u.role !== 'admin' || r.state !== 'pendiente' || !SDS[k] || !f) return;
+    const g = n => f[n].value.trim(); if (!g('concl')) return toast('Escribe la conclusión'); if (!g('nombre') || !g('apellido')) return toast('Completa tu nombre y apellido');
+    const now = Date.now(); r.rec = { res: k, evalu: g('evalu'), concl: g('concl'), nombre: g('nombre'), apellido: g('apellido'), cargo: g('cargo'), fecha: g('fecha'), ts: now, by: u.id }; r.state = k; r.upd = now;
+    save(); closeModal(); toast(k === 'aprobada' ? 'Solicitud aprobada. Se le avisó al solicitante' : 'Solicitud rechazada. Se le avisó al solicitante'); render();
+  },
+  sdpdf: t => { const r = S.sdoc.find(x => x.id === t.dataset.id); if (r) sdPdf(r); }
+});
+FORM.sdnone = () => { };
+
+/* ---- PDF con el formato de la planilla ---- */
+async function sdPdf(r) {
+  toast('Preparando PDF…'); let d;
+  try { d = await pdfNew(); } catch (e) { return toast('No se pudo cargar el generador de PDF. Revisa tu conexión a internet.'); }
+  const m = 10, W = 190, s = r.sol || {}, dc = r.doc || {}, c = r.rec;
+  const fit = (txt, w, h) => { txt = String(txt || ''); for (const fs of [9, 8, 7, 6.5]) { d.setFontSize(fs); const t = d.splitTextToSize(txt, w - 4); if (t.length * fs * 0.42 <= h - 2) return [t, fs]; } d.setFontSize(6.5); const t = d.splitTextToSize(txt, w - 4), mx = Math.max(1, Math.floor((h - 2) / (6.5 * 0.42))); return [t.slice(0, mx), 6.5]; };
+  const cell = (x, y, w, h, label, val) => { d.setFillColor(240, 240, 240); d.rect(x, y + 4.5, w, h - 4.5, 'F'); d.setDrawColor(0); d.setLineWidth(.2); d.line(x, y, x + w, y); d.setFont('helvetica', 'italic'); d.setFontSize(7.5); d.setTextColor(60); d.text(label, x + 1, y + 3.4); d.setTextColor(0); d.setFont('helvetica', 'normal'); const [t, fs] = fit(val, w, h - 4.5); d.setFontSize(fs); d.text(t, x + 1.5, y + 8.5); };
+  const chk = (x, y, on) => { d.setDrawColor(0); d.setLineWidth(.25); d.rect(x, y - 2.6, 3, 3); if (on) { d.setLineWidth(.45); d.line(x, y - 2.6, x + 3, y + .4); d.line(x + 3, y - 2.6, x, y + .4); } };
+  const head = (t, y, sub) => { d.setFont('helvetica', 'bold'); d.setFontSize(11); d.text(t, m, y); if (sub) { d.setFont('helvetica', 'italic'); d.setFontSize(7); d.setTextColor(80); d.text(sub, m, y + 3.5); d.setTextColor(0); } };
+  try { const ip = d.getImageProperties(LOGO), hh = 20; d.addImage(LOGO, ip.fileType || 'PNG', m + 2, 12, hh * ip.width / ip.height, hh); } catch (e) { }
+  d.setFont('helvetica', 'bolditalic'); d.setFontSize(12.5); d.text('SOLICITUD DE ELABORACIÓN, ACTUALIZACIÓN O', m + W, 20, { align: 'right' }); d.text('DESINCORPORACIÓN DE DOCUMENTOS', m + W, 26, { align: 'right' });
+  head('RESPONSABLE DE LA SOLICITUD', 44, '(Para ser llenado por el Solicitante)');
+  let x = m; [['Nombre', s.nombre, 45], ['Apellido', s.apellido, 45], ['Cargo', s.cargo, 50], ['Teléfono', s.tel, 25], ['Fecha', s.fecha, 25]].forEach(([l, v, w]) => { cell(x, 52, w, 13, l, v); x += w; });
+  d.setFont('helvetica', 'bolditalic'); d.setFontSize(9); d.text('Solicitud', m, 71);
+  d.setDrawColor(0); d.setLineWidth(.2); d.line(m, 72.5, m + W, 72.5);
+  Object.entries(SDT).forEach(([k, l], i) => { chk(m + 2, 78 + i * 6, r.tipo === k); d.setFont('helvetica', 'normal'); d.setFontSize(8.5); d.text(l, m + 8, 78 + i * 6); });
+  d.setFont('helvetica', 'bolditalic'); d.setFontSize(8.5); d.text('Documento Afectado', m + 100, 77, { align: 'center' }); d.setFont('helvetica', 'italic'); d.setFontSize(7); d.text('(solo indique el nombre para casos de inclusión)', m + 100, 80.5, { align: 'center' });
+  x = m + 45; [['Código', dc.codigo, 30], ['Revisión', dc.rev, 30], ['Nombre', dc.nombre, 85]].forEach(([l, v, w]) => { cell(x, 84, w, 16, l, v); x += w; });
+  head('JUSTIFICACIÓN', 110); d.line(m, 112, m + W, 112);
+  cell(m, 113, W, 26, 'Aspectos a Modificar', r.aspectos); cell(m, 142, W, 34, 'Detalles de la Propuesta', r.detalles);
+  head('RECEPCIÓN', 186, '(solo para ser llenada por el área de Organización y Procesos)');
+  cell(m, 194, W, 24, 'Evaluación (sobre la solicitud)', c && c.evalu); cell(m, 221, W, 26, 'Conclusión', c && c.concl);
+  [['Aprobada', 'aprobada'], ['Rechazada', 'rechazada']].forEach(([l, k], i) => { chk(m + 2, 258 + i * 6, !!c && c.res === k); d.setFont('helvetica', 'italic'); d.setFontSize(8.5); d.text(l, m + 8, 258 + i * 6); });
+  x = m + 32; [['Nombre', c && c.nombre, 45], ['Apellido', c && c.apellido, 45], ['Cargo', c && c.cargo, 40], ['Fecha', c && c.fecha, 28]].forEach(([l, v, w]) => { cell(x, 251, w, 14, l, v); x += w; });
+  d.setDrawColor(150); d.line(m, 285, m + W, 285); d.setFont('helvetica', 'normal'); d.setFontSize(7); d.setTextColor(120); d.text('GILACA-F-OYP-01-00-06/26', m, 289); d.text('Solicitud ' + r.no + ' · ' + SDS[r.state][0] + ' · generado desde GilApp', m + W, 289, { align: 'right' });
+  d.save('solicitud-documento-' + r.no + '.pdf');
+}
 
 (async () => { try { await enter(); } catch (e) { console.error(e); render(); } })();
 </script>
