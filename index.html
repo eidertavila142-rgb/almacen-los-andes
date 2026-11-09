@@ -346,9 +346,9 @@ let idleT; const IDLE_MS = 15 * 60 * 1000;
 const idleReset = () => { clearTimeout(idleT); idleT = setTimeout(() => { if (ui.user) { ACT.logout(); toast('Sesión cerrada por inactividad'); } }, IDLE_MS); };
 ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev => document.addEventListener(ev, idleReset, { passive: true })); idleReset();
 const EMAIL = n => 'almacen.' + String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') + '@gmail.com';
-let S = { users: [], depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], tstock: [], sdoc: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
+let S = { users: [], depts: [], cargos: [], ticat: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], tstock: [], sdoc: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
 let SNAP = {};
-const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), tk: () => S.tk, stock: () => S.stock, mstock: () => S.mstock, tstock: () => S.tstock, sdoc: () => S.sdoc, asis: () => S.asis, asisrh: () => S.asisrh, fin: () => S.fin, firmas: () => S.firmas, sdeleg: () => S.sdeleg, ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
+const COLL = { docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), ticat: () => S.ticat, tk: () => S.tk, stock: () => S.stock, mstock: () => S.mstock, tstock: () => S.tstock, sdoc: () => S.sdoc, asis: () => S.asis, asisrh: () => S.asisrh, fin: () => S.fin, firmas: () => S.firmas, sdeleg: () => S.sdeleg, ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
 function snapNow() {
   const m = {};
   for (const c in COLL) for (const x of COLL[c]()) m[c + '|' + x.id] = JSON.stringify(x);
@@ -383,7 +383,7 @@ function save() {
 async function loadAll() {
   const [p, it] = await Promise.all([SB.from('profiles').select('*'), SB.from('items').select('coll,id,data').limit(5000)]);
   if (p.error || it.error) throw (p.error || it.error);
-  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], tstock: [], sdoc: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
+  S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), depts: [], cargos: [], ticat: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], stock: [], mstock: [], tstock: [], sdoc: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
   const UC = {}; for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'cargos') S.cargos.push(r.data.n); else if (r.coll === 'ucargo') UC[r.id] = r.data.cargo; else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (S[r.coll]) S[r.coll].push(r.data); }
   S.users.forEach(u => { u.cargo = UC[u.id] || ''; });
   SNAP = snapNow();
@@ -1150,11 +1150,14 @@ const FORM = {
 
 /* ============ Módulos 2 (TI) y 3 (Mantenimiento) ============ */
 const RL = { admin: 'Admin Biblioteca', admin_ti: 'Admin TI', admin_mant: 'Admin Mantenimiento', sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura', gerente_mant: 'Gerente de Mantenimiento', tk_crea: 'Atención al cliente (tickets)', tk_desp: 'Despacho', tk_ver: 'Verificación de tickets', tk_alm: 'Almacén', cobranza: 'Cobranza', rrhh: 'Talento Humano', user: 'Usuario' };
-const TI_CATS = ['Falla de impresora', 'Falta de tinta / tóner', 'Falta de papel', 'Caída de internet', 'Falla de computadora', 'Problema con el correo', 'Sin acceso a sistema o clave', 'Instalación de software', 'Teléfono / telefonía', 'Otro'];
+/* Razones de solicitud a TI: las crea el Admin TI (con su prioridad) en el panel "Razones de solicitud"; no hay lista fija */
+const tiCats = () => S.ticat.map(c => c.n);
+const tiCatsAll = () => [...new Set([...S.ticat.map(c => c.n), ...S.ti.map(r => r.cat).filter(Boolean)])];
+const priPill = u => `<span class="pill ${u === 'Alta' ? 'danger' : u === 'Media' ? 'warn' : 'gray'}">${esc(u)}</span>`;
 const URG = ['Baja', 'Media', 'Alta'];
 const places = () => [['General', ['Comedor', 'Recepción', 'Estacionamiento', 'Otro lugar']], ['Oficinas', S.depts.map(d => 'Oficina de ' + d)], ['Baños', S.depts.map(d => 'Baño de ' + d)]];
 const CFG = {
-  ti: { t: 'Solicitudes TI', f: 'cat', fl: 'Categoría', opts: () => TI_CATS, st: [['pendiente', 'En espera', 'warn', 'En espera'], ['proceso', 'En proceso', '', 'En proceso'], ['terminada', 'En pausa (por confirmar)', 'warn', 'En pausa'], ['incompleta', 'Incompletas', 'danger', 'Incompleta'], ['cerrada', 'Terminadas', 'ok', 'Terminada'], ['aprobada', 'Aprobadas (anteriores)', 'ok', 'Aprobada']] },
+  ti: { t: 'Solicitudes TI', f: 'cat', fl: 'Razón', opts: () => tiCatsAll(), st: [['pendiente', 'En espera', 'warn', 'En espera'], ['proceso', 'En proceso', '', 'En proceso'], ['terminada', 'En pausa (por confirmar)', 'warn', 'En pausa'], ['incompleta', 'Incompletas', 'danger', 'Incompleta'], ['cerrada', 'Terminadas', 'ok', 'Terminada'], ['aprobada', 'Aprobadas (anteriores)', 'ok', 'Aprobada']] },
   mant: { t: 'Solicitudes de mantenimiento', f: 'place', fl: 'Lugar', opts: () => places().flatMap(g => g[1]), st: [['enviada', 'Enviadas', 'warn', 'Enviada'], ['terminada', 'Terminadas', 'ok', 'Terminada'], ['pedido', 'En pedido', '', 'Solicitud de pedido'], ['gerente', 'Con el gerente', 'warn', 'Enviada al gerente'], ['contaduria', 'Por pasar a contaduría', 'ok', 'Por pasar a contaduría'], ['cobranza', 'En cobranza', 'ok', 'Enviada a cobranza'], ['atencion', 'En atención', '', 'En atención'], ['aceptada', 'Aceptadas', 'ok', 'Aceptada'], ['pendiente', 'Pendientes', 'danger', 'Pendiente']] }
 };
 I.pc = '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
@@ -1172,7 +1175,7 @@ function uActs(r, k) {
   return r.state === 'atencion' ? b('aceptada', 'Marcar aceptada') + ' ' + b('pendiente', 'Marcar pendiente') : '';
 }
 function reqTable(k, rs, adm) {
-  const c = CFG[k], H = [...(adm ? ['Usuario', 'Departamento'] : []), c.fl, ...(k === 'ti' ? ['Urgencia'] : []), 'Descripción', 'Fecha', 'Estado', ''];
+  const c = CFG[k], H = [...(adm ? ['Usuario', 'Departamento'] : []), c.fl, ...(k === 'ti' ? ['Prioridad'] : []), 'Descripción', 'Fecha', 'Estado', ''];
   const act = r => adm ? (k === 'mant' && (r.state === 'enviada' || r.state === 'pendiente') ? `<button class="btn sm primary" data-act="rset" data-c="mant" data-id="${r.id}" data-s="atencion">${r.state === 'enviada' ? 'Aceptar' : 'Retomar'}</button>` : '') : uActs(r, k);
   if (!rs.length) return `<div class="tw"><div class="empty">No hay solicitudes.</div></div>`;
   return searchBox('tb_req', 'Buscar solicitudes…') + `<div class="tw"><table><thead><tr>${H.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody id="tb_req">${rs.map(r => `<tr data-q="${esc(norm([r.uname, r.dept, r[c.f], r.text].join(' ')))}">${adm ? `<td><b>${esc(unm(r))}</b></td><td>${esc(r.dept) || '—'}</td>` : ''}<td>${esc(r[c.f])}</td>${k === 'ti' ? `<td><span class="pill ${r.urg === 'Alta' ? 'danger' : r.urg === 'Media' ? 'warn' : 'gray'}">${esc(r.urg)}</span></td>` : ''}<td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${fmt(r.ts)}</td><td>${stP(k, r.state)}${k === 'ti' && r.seen && r.state === 'pendiente' ? ' <span class="pill gray">Vista por TI</span>' : ''}${k === 'ti' && r.state === 'incompleta' && r.incMotivo ? `<div class="small" style="white-space:pre-wrap;max-width:240px"><b>Motivo:</b> ${esc(r.incMotivo)}</div>` : ''}</td><td style="text-align:right;white-space:nowrap">${act(r)}</td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>`;
@@ -1181,7 +1184,7 @@ function uReq(k) {
   const u = cur(), c = CFG[k], mine = S[k].filter(r => r.uid === u.id), rs = rows(k).filter(r => r.uid === u.id);
   const tabs = `<div class="tabs" style="max-width:620px">${[['', 'Todas'], ...c.st].map(s => `<button data-act="rst" data-s="${s[0]}" class="${(ui.rs || '') === s[0] ? 'on' : ''}">${s[1]}</button>`).join('')}</div>`;
   const form = k === 'ti'
-    ? `<form data-form="ti" class="panel stack" style="max-width:640px"><h2>Nueva solicitud a TI</h2><div class="grid2"><label>Categoría<select name="cat">${TI_CATS.map(x => `<option>${x}</option>`).join('')}</select></label><label>Urgencia<select name="urg">${URG.map((x, i) => `<option ${i === 1 ? 'selected' : ''}>${x}</option>`).join('')}</select></label></div><label>Describe el problema<textarea name="text" rows="3" required></textarea></label><div><button class="btn primary">Enviar solicitud</button></div></form>`
+    ? (S.ticat.length ? `<form data-form="ti" class="panel stack" style="max-width:640px"><h2>Nueva solicitud a TI</h2><div class="grid2"><label>Razón de la solicitud<select name="cat" data-chg="ticausa" required><option value="">Elige la razón…</option>${S.ticat.map(x => `<option>${esc(x.n)}</option>`).join('')}</select></label><div><div class="small" style="margin-bottom:6px">Prioridad (la define TI)</div><div id="tipri"><span class="muted">Se muestra al elegir la razón</span></div></div></div><label>Describe el problema<textarea name="text" rows="3" required></textarea></label><div><button class="btn primary">Enviar solicitud</button></div></form>` : `<div class="panel" style="max-width:640px"><h2>Nueva solicitud a TI</h2><div class="empty">TI aún no ha registrado las razones por las que se puede solicitar. Vuelve a intentarlo más tarde.</div></div>`)
     : `<form data-form="mant" class="panel stack" style="max-width:640px"><h2>Nueva solicitud de mantenimiento</h2><label>Lugar<select name="place">${places().map(g => `<optgroup label="${g[0]}">${g[1].map(x => `<option>${esc(x)}</option>`).join('')}</optgroup>`).join('')}</select></label><label>¿Qué ocurre?<textarea name="text" rows="3" required placeholder="Describe lo que ocurre"></textarea></label><div><button class="btn primary">Enviar solicitud</button></div></form>`;
   return `<h1>${c.t}</h1><p class="sub">${k === 'ti' ? 'Envía tu problema tecnológico a TI y, al terminar, marca cómo quedó.' : 'Envía tu solicitud; cuando te atiendan, marca si quedó aceptada o pendiente.'}</p>
   <div class="stats">${c.st.map(s => `<div class="stat"><b>${mine.filter(r => r.state === s[0]).length}</b><span>${s[1]}</span></div>`).join('')}</div>${form}<h2>Mis solicitudes</h2>${tabs}${fbar(k, 0)}${reqTable(k, rs, 0)}`;
@@ -1208,8 +1211,43 @@ Object.assign(ACT, {
 const _unav = ACT.unav; ACT.unav = t => { ui.rs = ''; ui.rcat = ''; ui.rdep = ''; _unav(t); };
 Object.assign(CHG, { rcat: t => { ui.rcat = t.value; render(); }, rdep: t => { ui.rdep = t.value; render(); } });
 Object.assign(FORM, {
-  ti: f => mkReq(f, 'ti', { cat: f.cat.value, urg: f.urg.value }, 'pendiente', 'Solicitud enviada a TI'),
+  ti: f => { const c = S.ticat.find(x => x.n === f.cat.value); if (!c) return toast('Elige la razón de la solicitud'); mkReq(f, 'ti', { cat: c.n, urg: c.urg }, 'pendiente', 'Solicitud enviada a TI'); },
   mant: f => mkReq(f, 'mant', { place: f.place.value }, 'enviada', 'Solicitud enviada a mantenimiento')
+});
+
+/* ============ Razones de solicitud a TI (las crea y prioriza el Admin TI) ============ */
+function vTiRazones() {
+  const cnt = n => S.ti.filter(r => r.cat === n).length;
+  return `<h1>Razones de solicitud</h1><p class="sub">Crea aquí las razones por las que los usuarios pueden pedir ayuda a TI y define la <b>prioridad</b> de cada una. Estas mismas razones son las opciones que se ven en "Nueva solicitud a TI", y la solicitud queda con la prioridad que tú pongas. Si cambias una prioridad, aplica a las solicitudes nuevas; las ya enviadas conservan la que tenían.</p>
+  <form data-form="ticat" class="row" style="margin-bottom:14px;flex-wrap:wrap;max-width:680px"><input name="n" placeholder="Nueva razón (ej. Falla de impresora)" required style="flex:1;min-width:220px"><select name="urg" style="width:auto" title="Prioridad">${URG.map((x, i) => `<option ${i === 1 ? 'selected' : ''}>${x}</option>`).join('')}</select><button class="btn primary">Agregar razón</button></form>
+  <div class="tw"><table><thead><tr><th>Razón</th><th>Prioridad</th><th>Solicitudes</th><th></th></tr></thead><tbody>
+  ${S.ticat.map(c => `<tr><td><b>${esc(c.n)}</b></td><td>${priPill(c.urg)}</td><td>${cnt(c.n)}</td><td style="text-align:right;white-space:nowrap"><button class="btn sm" data-act="edticat" data-id="${c.id}">Editar</button> <button class="btn sm danger" data-act="delticat" data-id="${c.id}">Eliminar</button></td></tr>`).join('') || '<tr><td colspan="4"><div class="empty">Aún no hay razones. Crea la primera arriba para que los usuarios puedan enviar solicitudes a TI.</div></td></tr>'}</tbody></table></div>`;
+}
+Object.assign(ACT, {
+  edticat: t => {
+    if (cur().role !== 'admin_ti') return; const c = S.ticat.find(x => x.id === t.dataset.id); if (!c) return;
+    openModal(`<div class="modal" style="max-width:460px"><form data-form="ticatedit" data-id="${c.id}"><div class="modal-h"><h2 style="margin:0">Editar razón</h2></div><div class="modal-b stack"><label>Razón<input name="n" value="${esc(c.n)}" required></label><label>Prioridad<select name="urg">${URG.map(x => `<option ${x === c.urg ? 'selected' : ''}>${x}</option>`).join('')}</select></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar</button></div></form></div>`);
+  },
+  delticat: t => {
+    if (cur().role !== 'admin_ti') return; const c = S.ticat.find(x => x.id === t.dataset.id); if (!c) return;
+    askConfirm('¿Eliminar la razón "' + c.n + '"? Las solicitudes ya enviadas con esa razón se conservan.', () => { S.ticat = S.ticat.filter(x => x.id !== c.id); save(); toast('Razón eliminada'); render(); }, 'Eliminar');
+  }
+});
+Object.assign(CHG, {
+  ticausa: t => { const c = S.ticat.find(x => x.n === t.value), el = document.getElementById('tipri'); if (el) el.innerHTML = c ? priPill(c.urg) : '<span class="muted">Se muestra al elegir la razón</span>'; }
+});
+Object.assign(FORM, {
+  ticat: f => {
+    if (cur().role !== 'admin_ti') return; const n = f.n.value.trim();
+    if (!n || S.ticat.some(c => c.n.toLowerCase() === n.toLowerCase())) return toast('Nombre vacío o repetido');
+    S.ticat.push({ id: uid(), n, urg: f.urg.value }); save(); toast('Razón agregada'); render();
+  },
+  ticatedit: f => {
+    if (cur().role !== 'admin_ti') return; const c = S.ticat.find(x => x.id === f.dataset.id); if (!c) return; const n = f.n.value.trim();
+    if (!n || S.ticat.some(x => x.id !== c.id && x.n.toLowerCase() === n.toLowerCase())) return toast('Nombre vacío o repetido');
+    if (n !== c.n) S.ti.forEach(r => { if (r.cat === c.n) r.cat = n; });
+    c.n = n; c.urg = f.urg.value; save(); closeModal(); toast('Razón actualizada'); render();
+  }
 });
 
 /* ============ Supervisores de mantenimiento (S1 Automotriz · S2 Infraestructura) ============ */
@@ -1304,14 +1342,14 @@ function tiHist() {
   const rs = all.filter(r => (!h.user || r.uid === h.user) && (!h.dept || r.dept === h.dept) && (!h.cat || r.cat === h.cat) && (!h.urg || r.urg === h.urg) && (!h.from || r.ts >= new Date(h.from + 'T00:00:00').getTime()) && (!h.to || r.ts <= new Date(h.to + 'T23:59:59').getTime())).sort((a, b) => (b.closed || b.ts) - (a.closed || a.ts));
   const sel = (k, l, o) => `<select data-chg="hfil" data-k="${k}" style="width:auto;min-width:150px"><option value="">${l}</option>${o.map(([v, t]) => `<option value="${esc(v)}" ${h[k] === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
   const users = [...new Map(all.map(r => [r.uid, [r.uid, unm(r)]])).values()];
-  const T = v => v ? fmt(v) : '—', H = ['Fecha', 'Usuario', 'Departamento', 'Categoría', 'Urgencia', 'Descripción', 'Vista', 'En proceso', 'Terminada TI', 'Terminada por usuario', 'Cerrada', ''];
-  return `<h1>Terminadas</h1><p class="sub">Solicitudes que ya terminaron TI y el usuario. Filtra y descarga lo que ves.</p><div class="row" style="flex-wrap:wrap;margin-bottom:12px">${sel('user', 'Todos los usuarios', users)}${sel('dept', 'Todos los departamentos', S.depts.map(d => [d, d]))}${sel('cat', 'Todas las categorías', TI_CATS.map(d => [d, d]))}${sel('urg', 'Toda urgencia', URG.map(d => [d, d]))}<label class="row">Desde<input type="date" data-chg="hfil" data-k="from" value="${h.from || ''}" style="width:auto"></label><label class="row">Hasta<input type="date" data-chg="hfil" data-k="to" value="${h.to || ''}" style="width:auto"></label><button class="btn sm" data-act="hclr">Limpiar</button><button class="btn sm primary" data-act="hcsv">Descargar terminadas</button></div>` + (rs.length ? searchBox('tb_hist', 'Buscar en terminadas…') + `<div class="tw"><table><thead><tr>${H.map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody id="tb_hist">${rs.map(r => `<tr data-id="${r.id}" data-q="${esc(norm([unm(r), r.dept, r.cat, r.urg, r.text].join(' ')))}"><td class="muted">${fmt(r.ts)}</td><td><b>${esc(unm(r))}</b></td><td>${esc(r.dept) || '—'}</td><td>${esc(r.cat)}</td><td>${esc(r.urg)}</td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${T(r.seen)}</td><td class="muted">${T(r.procTs)}</td><td class="muted">${T(r.tiDone)}</td><td class="muted">${T(r.userDone)}</td><td class="muted">${T(r.closed)}</td><td style="text-align:right"><button class="btn sm" data-act="tiver" data-id="${r.id}">Ver</button></td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>` : '<div class="tw"><div class="empty">No hay solicitudes terminadas con estos filtros.</div></div>');
+  const T = v => v ? fmt(v) : '—', H = ['Fecha', 'Usuario', 'Departamento', 'Razón', 'Prioridad', 'Descripción', 'Vista', 'En proceso', 'Terminada TI', 'Terminada por usuario', 'Cerrada', ''];
+  return `<h1>Terminadas</h1><p class="sub">Solicitudes que ya terminaron TI y el usuario. Filtra y descarga lo que ves.</p><div class="row" style="flex-wrap:wrap;margin-bottom:12px">${sel('user', 'Todos los usuarios', users)}${sel('dept', 'Todos los departamentos', S.depts.map(d => [d, d]))}${sel('cat', 'Todas las razones', tiCatsAll().map(d => [d, d]))}${sel('urg', 'Prioridad: todas', URG.map(d => [d, d]))}<label class="row">Desde<input type="date" data-chg="hfil" data-k="from" value="${h.from || ''}" style="width:auto"></label><label class="row">Hasta<input type="date" data-chg="hfil" data-k="to" value="${h.to || ''}" style="width:auto"></label><button class="btn sm" data-act="hclr">Limpiar</button><button class="btn sm primary" data-act="hcsv">Descargar terminadas</button></div>` + (rs.length ? searchBox('tb_hist', 'Buscar en terminadas…') + `<div class="tw"><table><thead><tr>${H.map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody id="tb_hist">${rs.map(r => `<tr data-id="${r.id}" data-q="${esc(norm([unm(r), r.dept, r.cat, r.urg, r.text].join(' ')))}"><td class="muted">${fmt(r.ts)}</td><td><b>${esc(unm(r))}</b></td><td>${esc(r.dept) || '—'}</td><td>${esc(r.cat)}</td><td>${esc(r.urg)}</td><td style="min-width:200px;white-space:pre-wrap">${esc(r.text)}</td><td class="muted">${T(r.seen)}</td><td class="muted">${T(r.procTs)}</td><td class="muted">${T(r.tiDone)}</td><td class="muted">${T(r.userDone)}</td><td class="muted">${T(r.closed)}</td><td style="text-align:right"><button class="btn sm" data-act="tiver" data-id="${r.id}">Ver</button></td></tr>`).join('')}${NORES(H.length)}</tbody></table></div>` : '<div class="tw"><div class="empty">No hay solicitudes terminadas con estos filtros.</div></div>');
 }
 function viewTI() {
-  const u = cur(), v = (TIM[ui.view] || ['hist', 'stats', 'cuenta', 'talm'].includes(ui.view) || isU(ui.view)) ? ui.view : 'wait', n = k => S.ti.filter(r => TIM[k].includes(r.state)).length;
-  const nav = [['wait', 'Lista de espera', n('wait')], ['proc', 'En proceso', n('proc')], ['pausa', 'En pausa', n('pausa')], ['inc', 'Incompletas', n('inc')], ['hist', 'Terminadas', 0], ['talm', 'Almacén de TI', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]];
+  const u = cur(), v = (TIM[ui.view] || ['hist', 'stats', 'cuenta', 'talm', 'razones'].includes(ui.view) || isU(ui.view)) ? ui.view : 'wait', n = k => S.ti.filter(r => TIM[k].includes(r.state)).length;
+  const nav = [['wait', 'Lista de espera', n('wait')], ['proc', 'En proceso', n('proc')], ['pausa', 'En pausa', n('pausa')], ['inc', 'Incompletas', n('inc')], ['hist', 'Terminadas', 0], ['talm', 'Almacén de TI', 0], ['razones', 'Razones de solicitud', 0], ['stats', 'Estadísticas', 0], ['cuenta', 'Mi cuenta', 0]];
   const T = { wait: ['Lista de espera', 'Solicitudes nuevas. Pulsa <b>Ver</b> para ver todos los detalles (el usuario sabrá que ya la abriste) y pasarla a <b>En proceso</b> cuando vayas en camino.'], proc: ['En proceso', 'Las que estás atendiendo. Pulsa <b>Ver</b> y márcalas <b>Terminada</b> al acabar.'], pausa: ['En pausa', 'Ya las marcaste como terminadas y están <b>en pausa</b> hasta que el usuario también las dé por terminadas. Entonces pasan a la pestaña <b>Terminadas</b>.'], inc: ['Incompletas', 'Tareas que quedaron pendientes.'] };
-  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'talm' ? vTalm() : v === 'hist' ? tiHist() : v === 'stats' ? tiStats() : `<div class="between"><div><h1>${T[v][0]}</h1><p class="sub">${T[v][1]}</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${tiTable(S.ti.filter(r => TIM[v].includes(r.state)).sort((a, b) => b.ts - a.ts), v)}`;
+  const body = isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : v === 'razones' ? vTiRazones() : v === 'talm' ? vTalm() : v === 'hist' ? tiHist() : v === 'stats' ? tiStats() : `<div class="between"><div><h1>${T[v][0]}</h1><p class="sub">${T[v][1]}</p></div><button class="btn" data-act="refresh">Actualizar</button></div>${tiTable(S.ti.filter(r => TIM[v].includes(r.state)).sort((a, b) => b.ts - a.ts), v)}`;
   return mShell('Solicitudes TI', nav, v, body, u);
 }
 Object.assign(ACT, {
@@ -1322,7 +1360,7 @@ Object.assign(ACT, {
     const L = (l, ts) => `<div class="small">${l}: ${ts ? fmt(ts) : '—'}</div>`;
     const A = { pendiente: [['proceso', 'En proceso', 'primary'], ['incompleta', 'Incompleta', '']], proceso: [['terminada', 'Terminada', 'primary'], ['incompleta', 'Incompleta', '']], terminada: [['incompleta', 'Incompleta', '']], incompleta: [['proceso', 'En proceso', 'primary'], ['terminada', 'Terminada', '']] }[r.state] || [];
     const nota = r.state === 'incompleta' && r.incMotivo ? `<div class="small" style="white-space:pre-wrap"><b>Motivo de incompleta:</b> ${esc(r.incMotivo)}</div>` : r.state === 'terminada' ? '<div class="small">En pausa: esperando que el usuario también la dé por terminada.</div>' : r.userDone && r.state !== 'cerrada' ? '<div class="small">El usuario ya la dio por terminada; falta que la marques como terminada.</div>' : '';
-    openModal(`<div class="modal"><div class="modal-h"><h2 style="margin:0">Solicitud de TI</h2>${stP('ti', r.state)}</div><div class="modal-b stack"><div class="grid2"><div><div class="small">Solicitante</div><b>${esc(unm(r))}</b></div><div><div class="small">Usuario</div>${esc(us.name || '—')}</div></div><div class="grid2"><div><div class="small">Departamento</div>${esc(r.dept) || 'Sin departamento'}</div><div><div class="small">Cargo / rol</div>${esc(rolOf(r)) || '—'}</div></div><div class="grid2"><div><div class="small">Categoría</div>${esc(r.cat)}</div><div><div class="small">Urgencia</div>${esc(r.urg)}</div></div><div><div class="small">Descripción</div><div style="white-space:pre-wrap">${esc(r.text)}</div></div><div>${L('Enviada', r.ts)}${L('Vista por TI', r.seen)}${L('En proceso', r.procTs)}${L('Terminada por TI', r.tiDone)}${L('Terminada por el usuario', r.userDone)}${nota}</div></div><div class="modal-f"><button class="btn" data-act="close">Cerrar</button>${A.map(([st, l, c]) => `<button class="btn ${c}" data-act="${st === 'incompleta' ? 'tiinc' : 'tiset'}" data-id="${r.id}" data-s="${st}">${l}</button>`).join('')}</div></div>`);
+    openModal(`<div class="modal"><div class="modal-h"><h2 style="margin:0">Solicitud de TI</h2>${stP('ti', r.state)}</div><div class="modal-b stack"><div class="grid2"><div><div class="small">Solicitante</div><b>${esc(unm(r))}</b></div><div><div class="small">Usuario</div>${esc(us.name || '—')}</div></div><div class="grid2"><div><div class="small">Departamento</div>${esc(r.dept) || 'Sin departamento'}</div><div><div class="small">Cargo / rol</div>${esc(rolOf(r)) || '—'}</div></div><div class="grid2"><div><div class="small">Razón</div>${esc(r.cat)}</div><div><div class="small">Prioridad</div>${esc(r.urg)}</div></div><div><div class="small">Descripción</div><div style="white-space:pre-wrap">${esc(r.text)}</div></div><div>${L('Enviada', r.ts)}${L('Vista por TI', r.seen)}${L('En proceso', r.procTs)}${L('Terminada por TI', r.tiDone)}${L('Terminada por el usuario', r.userDone)}${nota}</div></div><div class="modal-f"><button class="btn" data-act="close">Cerrar</button>${A.map(([st, l, c]) => `<button class="btn ${c}" data-act="${st === 'incompleta' ? 'tiinc' : 'tiset'}" data-id="${r.id}" data-s="${st}">${l}</button>`).join('')}</div></div>`);
   },
   tiinc: t => {
     const r = S.ti.find(x => x.id === t.dataset.id); if (!r) return;
@@ -1345,7 +1383,7 @@ Object.assign(ACT, {
     const ids = new Set($$('#tb_hist tr[data-id]:not([hidden])').map(x => x.dataset.id)), rs = S.ti.filter(r => ids.has(r.id));
     if (!rs.length) return toast('No hay filas para descargar');
     const T = v => v ? new Date(v).toLocaleString('es') : '', cs = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-    const data = [['Fecha solicitud', 'Usuario', 'Cédula', 'Departamento', 'Categoría', 'Urgencia', 'Descripción', 'Estado', 'Vista por TI', 'En proceso', 'Terminada por TI', 'Confirmada por el usuario', 'Cerrada'], ...rs.map(r => { const u = S.users.find(x => x.id === r.uid) || {}; return [T(r.ts), unm(r), u.name || '', r.dept || '', r.cat, r.urg, r.text, r.state === 'aprobada' ? 'Aprobada' : 'Cerrada', T(r.seen), T(r.procTs), T(r.tiDone), T(r.userDone), T(r.closed)]; })];
+    const data = [['Fecha solicitud', 'Usuario', 'Cédula', 'Departamento', 'Razón', 'Prioridad', 'Descripción', 'Estado', 'Vista por TI', 'En proceso', 'Terminada por TI', 'Confirmada por el usuario', 'Cerrada'], ...rs.map(r => { const u = S.users.find(x => x.id === r.uid) || {}; return [T(r.ts), unm(r), u.name || '', r.dept || '', r.cat, r.urg, r.text, r.state === 'aprobada' ? 'Aprobada' : 'Cerrada', T(r.seen), T(r.procTs), T(r.tiDone), T(r.userDone), T(r.closed)]; })];
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + data.map(x => x.map(cs).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' })); a.download = 'historial-ti-' + new Date().toISOString().slice(0, 10) + '.csv'; document.body.appendChild(a); a.click(); a.remove();
   }
 });
@@ -1365,16 +1403,16 @@ const ST_CFG = {
   ti: {
     name: 'solicitudes a TI', file: 'ti', def: 'cat', topLbl: 'Tipo que más llega', topFn: r => r.cat || 'Otro',
     rows: () => S.ti,
-    flt: [['f1', 'Todos los tipos de solicitud', () => TI_CATS, r => r.cat], ['f2', 'Toda urgencia', () => URG, r => r.urg]],
+    flt: [['f1', 'Todos los tipos de solicitud', () => tiCatsAll(), r => r.cat], ['f2', 'Prioridad: todas', () => URG, r => r.urg]],
     an: {
       date: { t: 'Solicitudes por fecha', kind: 'date', cts: CT_DATE },
       cat: { t: 'Tipos de solicitud que más llegan', kind: 'count', fn: r => r.cat || 'Otro', first: 'Tipo de solicitud', cts: CT_SINGLE },
       dept: { t: 'Departamentos que más solicitan', kind: 'count', fn: r => r.dept || 'Sin departamento', first: 'Departamento', cts: CT_SINGLE },
       depcat: { t: 'Qué solicita cada departamento', kind: 'matrix', fn: r => r.cat || 'Otro', cts: CT_MAT },
-      urg: { t: 'Solicitudes por urgencia', kind: 'count', fn: r => r.urg, fixed: URG, first: 'Urgencia', colors: { Baja: '#059669', Media: '#f59e0b', Alta: '#c8241b' }, cts: CT_SINGLE },
+      urg: { t: 'Solicitudes por prioridad', kind: 'count', fn: r => r.urg, fixed: URG, first: 'Prioridad', colors: { Baja: '#059669', Media: '#f59e0b', Alta: '#c8241b' }, cts: CT_SINGLE },
       user: { t: 'Usuarios que más solicitan', kind: 'count', fn: r => unm(r) || 'Sin nombre', limit: 15, first: 'Usuario', cts: ['hbar', 'bar', 'pie', 'doughnut'] }
     },
-    cols: [['Fecha y hora', 18], ['Solicitante', 26], ['Usuario', 18], ['Departamento', 22], ['Tipo de solicitud', 28], ['Urgencia', 11], ['Descripción', 55], ['Estado', 13], ['Vista por TI', 18], ['En proceso', 18], ['Terminada por TI', 18], ['Terminada por el usuario', 18], ['Cerrada', 18], ['Motivo de incompleta', 40]], dateCols: [1, 9, 10, 11, 12, 13], descCol: 7,
+    cols: [['Fecha y hora', 18], ['Solicitante', 26], ['Usuario', 18], ['Departamento', 22], ['Tipo de solicitud', 28], ['Prioridad', 11], ['Descripción', 55], ['Estado', 13], ['Vista por TI', 18], ['En proceso', 18], ['Terminada por TI', 18], ['Terminada por el usuario', 18], ['Cerrada', 18], ['Motivo de incompleta', 40]], dateCols: [1, 9, 10, 11, 12, 13], descCol: 7,
     row: (r, u) => [stD(r.ts), unm(r), u.name || '', r.dept || '', r.cat, r.urg, r.text, tiStl(r), stD(r.seen), stD(r.procTs), stD(r.tiDone), stD(r.userDone), stD(r.closed), r.incMotivo || '']
   },
   mant: {
@@ -2251,7 +2289,7 @@ async function liveRefresh() {
   if (!u || (u.role === 'admin' && ui.view === 'subir')) return;
   const typing = /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
   try { await chain; await loadAll(); notifyScan(); } catch (e) { return; }
-  const live = u.role === 'admin' ? ['resumen', 'msgs', 'docs', 'sdoc'].includes(ui.view) : u.role === 'user' ? (ui.uview.startsWith('folder') || ['desk', 'lib', 'ti', 'mant', 'mail', 'sdoc'].includes(ui.uview)) : !['cuenta', 'nuevo'].includes(ui.view);
+  const live = u.role === 'admin' ? ['resumen', 'msgs', 'docs', 'sdoc'].includes(ui.view) : u.role === 'user' ? (ui.uview.startsWith('folder') || ['desk', 'lib', 'ti', 'mant', 'mail', 'sdoc'].includes(ui.uview)) : !['cuenta', 'nuevo', 'razones'].includes(ui.view);
   if (!typing && live && !$('#modal').innerHTML) render();
 }
 function rtStart() {
