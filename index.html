@@ -44,6 +44,15 @@ input[type=text],input[type=password],input[type=search],select,textarea,input:n
 input[type=file]{width:100%;padding:7px;border:1px dashed var(--line);border-radius:6px;background:var(--surface)}
 input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
 textarea{resize:vertical;min-height:64px}
+/* Campos de fecha, monto (número), teléfono, etc.: mismo estilo que los demás campos, para que se vean en modo oscuro */
+input[type=date],input[type=number],input[type=tel],input[type=email],input[type=time],input[type=month],input[type=datetime-local],input[type=url]{
+  padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);outline:none;min-height:38px}
+input[type=date]:focus,input[type=number]:focus,input[type=tel]:focus,input[type=email]:focus,input[type=time]:focus,input[type=month]:focus,input[type=datetime-local]:focus,input[type=url]:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:.8}
+input::selection,textarea::selection{background:var(--accent);color:#fff}
+/* Calendario, flechitas y desplegables nativos en oscuro cuando el tema es oscuro */
+#app.gw,#app.gw input,#app.gw select,#app.gw textarea,:root[data-theme="dark"]{color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark}}
 label{display:block;font-size:12px;color:var(--muted);font-weight:500}
 label>input,label>select,label>textarea{margin-top:4px;color:var(--text);font-size:14px;font-weight:400}
 .chk{display:flex;align-items:center;gap:8px;color:var(--text);font-size:13px;font-weight:400}
