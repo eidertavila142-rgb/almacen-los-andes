@@ -1637,7 +1637,7 @@ Object.assign(CHG, { stf: t => { stS()[t.dataset.k] = t.value; ST_ANIM = true; r
 
 /* ============ Módulo 4: Tickets de despacho (Dailyn → Leovanny → Osmerly → Yorgely → Cobranza) ============ */
 const TKR = { tk_crea: 'Atención al cliente', tk_desp: 'Despacho', tk_ver: 'Verificación', tk_alm: 'Almacén', tk_anal: 'Analista de despacho', cobranza: 'Cobranza' };
-const TKS = { nuevo: ['Sin enviar', 'gray'], enviado: ['En despacho', 'warn'], salida: ['Por verificar', 'warn'], confirmado: ['Con analista de despacho', 'warn'], planilla: ['Planilla lista · en almacén', 'warn'], despachado: ['Salió del almacén', 'ok'], cobranza: ['En cobranza', 'ok'], cancelado: ['Cancelado', 'danger'], devuelto: ['Devuelto a despacho', 'danger'] };
+const TKS = { nuevo: ['Sin enviar', 'gray'], enviado: ['En despacho', 'warn'], salida: ['Por verificar', 'warn'], confirmado: ['Con analista de despacho', 'warn'], encamino: ['En camino', 'warn'], planilla: ['Llegó sin novedades · en almacén', 'warn'], despachado: ['Salió del almacén', 'ok'], cobranza: ['En cobranza', 'ok'], cancelado: ['Cancelado', 'danger'], devuelto: ['Devuelto a despacho', 'danger'] };
 const tkP = s => { const x = TKS[s] || [s, 'gray']; return `<span class="pill ${x[1]}">${x[0]}</span>`; };
 const tkNo = () => { const d = new Date(); return 'T-' + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(); };
 const nq = n => (+n || 0).toLocaleString('es', { maximumFractionDigits: 2 });
@@ -1645,29 +1645,30 @@ const uTxt = u => u === 'kg' ? 'kg' : 'unid.';
 const tkLines = r => (r.items || []).map(x => x.name + ': ' + nq(x.qty) + ' ' + uTxt(x.unit)).join('; ');
 const fp = ts => { const x = new Date(ts), p = n => String(n).padStart(2, '0'); return p(x.getDate()) + '/' + p(x.getMonth() + 1) + '/' + x.getFullYear() + ' ' + p(x.getHours()) + ':' + p(x.getMinutes()); };
 /* Lo que Leovanny ya marcó pero Yorgely aún no descuenta (queda "en el aire") */
-const stReserved = pid => S.tk.filter(r => ['salida', 'confirmado', 'planilla'].includes(r.state)).reduce((a, r) => a + (r.items || []).filter(x => x.pid === pid).reduce((b, x) => b + (+x.out || 0), 0), 0);
+const stReserved = pid => S.tk.filter(r => ['salida', 'confirmado', 'encamino', 'planilla'].includes(r.state)).reduce((a, r) => a + (r.items || []).filter(x => x.pid === pid).reduce((b, x) => b + (+x.out || 0), 0), 0);
 const TKN = {
   tk_crea: [['mis', 'Mis tickets'], ['act', 'Tickets activos'], ['nuevo', 'Nuevo ticket'], ['alm', 'Almacén'], ['cuenta', 'Mi cuenta']],
   tk_desp: [['por', 'Por despachar'], ['dev', 'Ticket devuelto'], ['hec', 'Con salida marcada'], ['rep', 'Repertorio de tickets'], ['alm', 'Almacén'], ['cuenta', 'Mi cuenta']],
-  tk_ver: [['por', 'Por verificar'], ['hec', 'Confirmados'], ['cuenta', 'Mi cuenta']],
+  tk_ver: [['por', 'Por verificar'], ['hec', 'Enviados a Eva'], ['cuenta', 'Mi cuenta']],
   tk_alm: [['por', 'Por dar salida'], ['cob', 'Por enviar a cobranza'], ['hec', 'Historial'], ['alm', 'Almacén'], ['stats', 'Estadísticas'], ['cuenta', 'Mi cuenta']],
-  tk_anal: [['por', 'Por registrar'], ['pla', 'Planillas de salida'], ['rut', 'Destinos y rutas'], ['inc', 'Tickets incompletos'], ['stats', 'Estadísticas'], ['cuenta', 'Mi cuenta']],
+  tk_anal: [['por', 'Por registrar'], ['ruta', 'En camino'], ['pla', 'Planillas de salida'], ['rut', 'Destinos y rutas'], ['inc', 'Tickets incompletos'], ['stats', 'Estadísticas'], ['cuenta', 'Mi cuenta']],
   cobranza: [['tk', 'Tickets recibidos'], ['ped', 'Pedidos de mantenimiento'], ['stats', 'Estadísticas'], ['cuenta', 'Mi cuenta']]
 };
 const TKF = {
   tk_crea: { mis: r => r.uid === cur().id },
-  tk_desp: { por: r => r.state === 'enviado', dev: r => r.state === 'devuelto', hec: r => ['salida', 'confirmado', 'planilla', 'despachado', 'cobranza'].includes(r.state), rep: r => r.state !== 'nuevo' },
-  tk_ver: { por: r => r.state === 'salida', hec: r => ['confirmado', 'planilla', 'despachado', 'cobranza'].includes(r.state) },
-  tk_anal: { por: r => r.state === 'confirmado', pla: r => !!r.planilla },
+  tk_desp: { por: r => r.state === 'enviado', dev: r => r.state === 'devuelto', hec: r => ['salida', 'confirmado', 'encamino', 'planilla', 'despachado', 'cobranza'].includes(r.state), rep: r => r.state !== 'nuevo' },
+  tk_ver: { por: r => r.state === 'salida', hec: r => ['confirmado', 'encamino', 'planilla', 'despachado', 'cobranza'].includes(r.state) },
+  tk_anal: { por: r => r.state === 'confirmado', ruta: r => r.state === 'encamino', pla: r => !!r.planilla },
   tk_alm: { por: r => r.state === 'planilla', cob: r => r.state === 'despachado', hec: r => ['cobranza', 'cancelado'].includes(r.state) },
   cobranza: { tk: r => r.state === 'cobranza' }
 };
 const TKT = {
   mis: ['Mis tickets', 'Tickets que creaste. Envía a despacho los que estén sin enviar.'],
-  por: { tk_desp: ['Por despachar', 'Tickets que te envió atención al cliente. Revisa que estén listos y marca la <b>salida para el cliente</b>: el sistema aún no descuenta del almacén.'], tk_ver: ['Por verificar', 'Compara lo que se pidió con lo que despacho marcó y, si está correcto, da el <b>cierre total</b>.'], tk_anal: ['Por registrar', 'Pedidos que Osmerly ya confirmó. Registra la <b>planilla de salida</b> (chofer, camión, producto y kilos) y se envía a almacén. Si un producto quedó pendiente, aparece en <b>Tickets incompletos</b>.'], tk_alm: ['Por dar salida', 'Pedidos con la planilla de salida lista. Al marcar <b>Salida del almacén</b> el sistema descuenta la existencia.'] },
+  por: { tk_desp: ['Por despachar', 'Tickets que te envió atención al cliente. Revisa que estén listos y marca la <b>salida para el cliente</b>: el sistema aún no descuenta del almacén.'], tk_ver: ['Por verificar', 'Compara lo que se pidió con lo que despacho marcó y, si está correcto, <b>envíalo a Eva</b> (analista de despacho). Tú ya no das el cierre del proceso.'], tk_anal: ['Por registrar', 'Pedidos que Osmerly te envió. Registra la <b>planilla de salida</b> (chofer, camión, producto y kilos) y <b>asigna el destino</b>; el ticket pasa a <b>En camino</b>. Si Osmerly lo marcó incompleto, verás aquí cuánto se pidió y cómo se entregó para recordarle el pendiente.'], tk_alm: ['Por dar salida', 'Pedidos cuyo camión Eva marcó como llegado sin novedades. Al marcar <b>Salida del almacén</b> el sistema descuenta la existencia.'] },
   cob: ['Por enviar a cobranza', 'Pedidos que ya salieron del almacén. Envía el documento a cobranza.'],
-  hec: { tk_desp: ['Con salida marcada', 'Tickets en los que ya marcaste la salida para el cliente.'], tk_ver: ['Confirmados', 'Tickets que ya cerraste.'], tk_alm: ['Historial', 'Tickets que ya enviaste a cobranza y pedidos cancelados.'] },
+  hec: { tk_desp: ['Con salida marcada', 'Tickets en los que ya marcaste la salida para el cliente.'], tk_ver: ['Enviados a Eva', 'Tickets que ya verificaste y enviaste a Eva.'], tk_alm: ['Historial', 'Tickets que ya enviaste a cobranza y pedidos cancelados.'] },
   dev: ['Ticket devuelto', 'Pedidos que Osmerly devolvió porque su marcaje no coincidió con el tuyo. Revisa el peso que ella observó, corrígelo y reenvíalo a verificación.'],
+  ruta: ['En camino', 'Camiones que ya salieron con su planilla. Asigna el destino de cada ticket (como en Destinos y rutas) y, cuando el camión llegue y todo vaya bien, marca <b>Llegó sin novedades</b>: el ticket pasa a Yorgely.'],
   rep: ['Repertorio de tickets', 'Todos los tickets generados.'],
   tk: ['Tickets recibidos', 'Tickets finales que llegaron a cobranza. Puedes descargarlos.']
 };
@@ -1683,8 +1684,9 @@ function tkCard(r, role) {
     + (role === 'tk_alm' && r.state === 'planilla' ? b('tkalm', 'Salida del almacén', 'primary') + b('tkcancel', 'Cancelar pedido', 'danger') : '')
     + (role === 'tk_alm' && r.state === 'despachado' ? b('tkcob', 'Enviar a cobranza', 'primary') : '')
     + (role === 'tk_desp' && r.state === 'devuelto' ? b('tkout', 'Corregir y reenviar a verificación', 'primary') : '')
-    + (role === 'tk_anal' && r.state === 'confirmado' ? b('tkplan', 'Registrar salida del camión', 'primary') : '');
-  return `<div class="panel stack" style="position:relative">${cowBadge(r)}<div class="between"><div><b>${esc(r.cliente)}</b><div class="small">${esc(r.no)} · ${esc(r.tipo || 'Sin tipo de cliente')} · ${esc(r.uname)}</div></div>${tkP(r.state)}</div>${lines}${r.nota ? `<div class="muted" style="font-size:13px;white-space:pre-wrap">${esc(r.nota)}</div>` : ''}${r.state === 'cancelado' ? `<div style="font-size:13px;white-space:pre-wrap"><b>Motivo de cancelación:</b> ${esc(r.cancelMotivo)}</div>` : ''}${r.state === 'devuelto' ? `<div style="font-size:13px"><b>Devuelto por ${esc(r.devBy || 'verificación')}:</b> el marcaje no coincide.${r.devNota ? '<div class="muted" style="white-space:pre-wrap">' + esc(r.devNota) + '</div>' : ''}</div>` : ''}${tkExtra(r)}<div class="muted" style="font-size:13px">${fmt(r.ts)}</div><div class="row" style="flex-wrap:wrap">${b('tkview', 'Ver')}${b('tkpdf', 'Descargar')}${r.planilla && (role === 'tk_alm' || role === 'cobranza') ? b('tkplpdfn', 'Planilla de salida') : ''}${b('tknotes', 'Notas' + (tkNotes(r).length ? ' (' + tkNotes(r).length + ')' : ''))}${acts}</div></div>`;
+    + (role === 'tk_anal' && r.state === 'confirmado' ? b('tkplan', 'Registrar salida del camión', 'primary') : '')
+    + (role === 'tk_anal' && r.state === 'encamino' ? b('tkdest', tkViaje(r) ? 'Editar destino' : 'Asignar destino', tkViaje(r) ? '' : 'primary') + b('tkarr', 'Llegó sin novedades', 'primary') + b('tkplan', 'Editar planilla') : '');
+  return `<div class="panel stack" style="position:relative">${cowBadge(r)}<div class="between"><div><b>${esc(r.cliente)}</b><div class="small">${esc(r.no)} · ${esc(r.tipo || 'Sin tipo de cliente')} · ${esc(r.uname)}</div></div>${tkP(r.state)}</div>${lines}${r.nota ? `<div class="muted" style="font-size:13px;white-space:pre-wrap">${esc(r.nota)}</div>` : ''}${r.state === 'cancelado' ? `<div style="font-size:13px;white-space:pre-wrap"><b>Motivo de cancelación:</b> ${esc(r.cancelMotivo)}</div>` : ''}${r.state === 'devuelto' ? `<div style="font-size:13px"><b>Devuelto por ${esc(r.devBy || 'verificación')}:</b> el marcaje no coincide.${r.devNota ? '<div class="muted" style="white-space:pre-wrap">' + esc(r.devNota) + '</div>' : ''}</div>` : ''}${tkExtra(r, role === 'tk_anal')}${role === 'tk_anal' ? tkIncBox(r) : ''}<div class="muted" style="font-size:13px">${fmt(r.ts)}</div><div class="row" style="flex-wrap:wrap">${b('tkview', 'Ver')}${b('tkpdf', 'Descargar')}${r.planilla && (role === 'tk_alm' || role === 'cobranza') ? b('tkplpdfn', 'Planilla de salida') : ''}${b('tknotes', 'Notas' + (tkNotes(r).length ? ' (' + tkNotes(r).length + ')' : ''))}${acts}</div></div>`;
 }
 const tkGrid = (rs, role, empty) => rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(r => tkCard(r, role)).join('')}</div>` : `<div class="tw"><div class="empty">${empty}</div></div>`;
 
@@ -1710,7 +1712,7 @@ function vTkNew() {
 function viewTK() {
   const u = cur(), role = u.role, N = TKN[role], v = (isU(ui.view) || N.some(x => x[0] === ui.view)) ? ui.view : N[0][0];
   const list = k => S.tk.filter(TKF[role][k] || (() => false)).sort((a, b) => b.ts - a.ts);
-  const cnt = k => ['por', 'cob', 'tk', 'dev'].includes(k) ? list(k).length : k === 'inc' ? incOpen().length : k === 'act' ? tkActive().length : k === 'ped' ? S.mant.filter(r => r.state === 'cobranza' && !r.cobDec).length : 0;
+  const cnt = k => ['por', 'ruta', 'cob', 'tk', 'dev'].includes(k) ? list(k).length : k === 'inc' ? incOpen().length : k === 'act' ? tkActive().length : k === 'ped' ? S.mant.filter(r => r.state === 'cobranza' && !r.cobDec).length : 0;
   const nav = N.map(([k, l]) => [k, l, cnt(k)]);
   let body;
   if (isU(v)) body = uBody(); else if (v === 'cuenta') body = vCuenta(); else if (v === 'stats') body = role === 'tk_anal' ? anaStats() : tiStats(); else if (v === 'pla') body = vPla(); else if (v === 'rut') body = vRut(); else if (v === 'inc') body = vInc(); else if (v === 'alm') body = vAlm(role); else if (v === 'act') body = vTkAct(); else if (v === 'nuevo') body = vTkNew();
@@ -2177,7 +2179,7 @@ function tkVerOpen(id) {
   openModal(`<div class="modal"><form data-form="tkver" data-id="${r.id}"><div class="modal-h"><h2 style="margin:0">Verificar pedido</h2></div><div class="modal-b stack"><div class="muted">${esc(r.cliente)} · ${esc(r.no)}. Compara cada producto con lo que marcó despacho y toca el <b>recuadro blanco</b> para marcarlo con ✓. Si el producto viene como <b>PENDIENTE</b>, marca también el <b>segundo recuadro</b> (al lado): así confirmas que sabes que el almacén no cubre todo lo requerido y no hace falta devolverlo.</div>
   ${(r.items || []).map((x, i) => `<div class="between" style="gap:12px"><div><b>${esc(x.name)}</b><div class="small">Pedido: ${nq(x.qty)} ${uTxt(x.unit)} · Despacho marcó: <b>${nq(x.out != null ? x.out : x.qty)} ${uTxt(x.unit)}</b></div>${x.pend ? '<div class="small" style="color:var(--accent);font-weight:700">⚠ PENDIENTE: Leovanny no tiene el pedido completo · faltan ' + nq(x.qty - (x.out || 0)) + ' ' + uTxt(x.unit) + '</div>' : ''}</div><div class="row" style="gap:10px;flex-wrap:nowrap"><label class="vbox" title="Cantidad verificada"><input type="checkbox" name="c${i}"><span></span></label>${x.pend ? '<label class="vbox" title="Soy consciente de que el almacén no cubre todo lo requerido"><input type="checkbox" name="f' + i + '"><span></span></label>' : '<span style="width:38px;height:38px;display:inline-block;border:2px dashed var(--line);border-radius:8px;opacity:.5"></span>'}</div></div>`).join('')}
   <div id="vmis" class="panel stack" style="display:none"><b style="font-size:13px">Lo que estás observando (escríbelo a mano)</b>${(r.items || []).map((x, i) => `<label>${esc(x.name)} (${uTxt(x.unit)})<input name="w${i}" type="number" min="0" step="any" value="${x.out != null ? x.out : x.qty}"></label>`).join('')}<label>Nota para despacho (opcional)<textarea name="vn" rows="2"></textarea></label></div></div>
-  <div class="modal-f" style="flex-wrap:wrap"><button type="button" class="btn" data-act="close">Cancelar</button><button type="button" class="btn danger" data-act="tkvmis">Marcaje no coincide</button><button type="button" class="btn primary" id="vok" data-act="tkvok">Confirmar pedido (cierre total)</button><button type="button" class="btn danger" id="vdev" data-act="tkvdev" style="display:none">Devolver a Leovanny</button></div></form></div>`);
+  <div class="modal-f" style="flex-wrap:wrap"><button type="button" class="btn" data-act="close">Cancelar</button><button type="button" class="btn danger" data-act="tkvmis">Marcaje no coincide</button><button type="button" class="btn primary" id="vok" data-act="tkvok">Verificado: enviar a Eva</button><button type="button" class="btn danger" id="vdev" data-act="tkvdev" style="display:none">Devolver a Leovanny</button></div></form></div>`);
 }
 FORM.tkver = f => {
   const r = S.tk.find(x => x.id === f.dataset.id); if (!r || r.state !== 'salida') { closeModal(); return toast('Este ticket ya no está por verificar'); }
@@ -2191,11 +2193,11 @@ FORM.tkver = f => {
   }
   if (!items.every((x, i) => f['c' + i] && f['c' + i].checked)) return toast('Marca todos los productos con ✓ antes de confirmar');
   const miss = items.filter((x, i) => x.pend && !(f['f' + i] && f['f' + i].checked)); if (miss.length) return toast('Marca el segundo recuadro (almacén no cubre) en: ' + miss.map(x => x.name).join(', '));
-  r.state = 'confirmado'; r.verTs = now; tkBuildFaltas(r); tkLog(r, 'Pedido verificado y confirmado (cierre total)' + (r.faltas.length ? ' · INCOMPLETO: Osmerly confirmó que el almacén no cubre ' + r.faltas.map(x => x.name + ' (faltan ' + nq(x.falta) + ')').join('; ') : '')); save(); closeModal(); toast('Pedido confirmado'); render();
+  r.state = 'confirmado'; r.verTs = now; r.verBy = dn(u); tkBuildFaltas(r); tkLog(r, 'Pedido verificado y enviado a Eva (analista de despacho)' + (r.faltas.length ? ' · INCOMPLETO: Osmerly confirmó que el almacén no cubre ' + r.faltas.map(x => x.name + ' (faltan ' + nq(x.falta) + ')').join('; ') : '')); save(); closeModal(); toast('Pedido enviado a Eva'); render();
 };
 
 /* ---- Tickets activos (atención al cliente: D y P) ---- */
-const TKH = { nuevo: [0, 'sin enviar', 'tk_crea'], enviado: [1, '', 'tk_desp'], devuelto: [1, 'devuelto por verificación', 'tk_desp'], salida: [2, '', 'tk_ver'], confirmado: [3, 'por registrar planilla de salida', 'tk_anal'], planilla: [4, 'por dar salida', 'tk_alm'], despachado: [4, 'por enviar a cobranza', 'tk_alm'], cobranza: [5, '', 'cobranza'], cancelado: [4, 'cancelado', 'tk_alm'] };
+const TKH = { nuevo: [0, 'sin enviar', 'tk_crea'], enviado: [1, '', 'tk_desp'], devuelto: [1, 'devuelto por verificación', 'tk_desp'], salida: [2, '', 'tk_ver'], confirmado: [3, 'por registrar planilla de salida', 'tk_anal'], encamino: [3, 'en camino al destino', 'tk_anal'], planilla: [4, 'llegó sin novedades · por dar salida', 'tk_alm'], despachado: [4, 'por enviar a cobranza', 'tk_alm'], cobranza: [5, '', 'cobranza'], cancelado: [4, 'cancelado', 'tk_alm'] };
 const tkActive = () => S.tk.filter(r => !['cobranza', 'cancelado'].includes(r.state));
 const tkLast = r => (r.hist && r.hist.length ? r.hist[r.hist.length - 1].ts : r.ts);
 const tkAgo = ts => { const m = Math.max(0, Math.round((Date.now() - ts) / 60000)); return m < 1 ? 'hace un momento' : m < 60 ? 'hace ' + m + ' min' : m < 1440 ? 'hace ' + Math.round(m / 60) + ' h' : 'hace ' + Math.round(m / 1440) + ' d'; };
@@ -2208,7 +2210,7 @@ function vTkAct() {
   const rs = tkActive().sort((a, b) => tkLast(b) - tkLast(a)), n = f => rs.filter(f).length;
   const card = r => { const h = TKH[r.state]; return `<div class="panel stack" style="position:relative">${cowBadge(r)}<div class="between"><div><b>${esc(r.cliente)}</b><div class="small">${esc(r.no)} · ${esc(r.tipo || 'Sin tipo de cliente')} · creado por ${esc(r.uname)}</div></div>${tkP(r.state)}</div>${tkTrack(r)}<div style="font-size:13px">Lo tiene: <b>${esc(tkWho(h[2], r))}</b> <span class="muted">(${esc(TKR[h[2]])}${h[1] ? ' · ' + h[1] : ''})</span></div><div class="small">Último movimiento: ${tkAgo(tkLast(r))}</div><div class="muted" style="font-size:13px">${(r.items || []).map(x => esc(x.name) + ' ' + nq(x.qty) + ' ' + uTxt(x.unit)).join(' · ')}</div><div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="tkview" data-id="${r.id}">Ver</button><button class="btn sm" data-act="tknotes" data-id="${r.id}">Notas${tkNotes(r).length ? ' (' + tkNotes(r).length + ')' : ''}</button></div></div>`; };
   return `<div class="between"><div><h1>Tickets activos</h1><p class="sub">Todos los tickets que aún no llegan a cobranza y quién los tiene ahora. Se actualiza solo.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
-  <div class="stats"><div class="stat"><b>${n(r => ['nuevo'].includes(r.state))}</b><span>Sin enviar</span></div><div class="stat"><b>${n(r => ['enviado', 'devuelto'].includes(r.state))}</b><span>Con Leovanny (despacho)</span></div><div class="stat"><b>${n(r => r.state === 'salida')}</b><span>Con Osmerly (verificación)</span></div><div class="stat"><b>${n(r => r.state === 'confirmado')}</b><span>Con Eva (analista de despacho)</span></div><div class="stat"><b>${n(r => ['planilla', 'despachado'].includes(r.state))}</b><span>Con Yorgely (almacén)</span></div></div>
+  <div class="stats"><div class="stat"><b>${n(r => ['nuevo'].includes(r.state))}</b><span>Sin enviar</span></div><div class="stat"><b>${n(r => ['enviado', 'devuelto'].includes(r.state))}</b><span>Con Leovanny (despacho)</span></div><div class="stat"><b>${n(r => r.state === 'salida')}</b><span>Con Osmerly (verificación)</span></div><div class="stat"><b>${n(r => ['confirmado', 'encamino'].includes(r.state))}</b><span>Con Eva (analista de despacho)</span></div><div class="stat"><b>${n(r => ['planilla', 'despachado'].includes(r.state))}</b><span>Con Yorgely (almacén)</span></div></div>
   ${rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(card).join('')}</div>` : '<div class="tw"><div class="empty">No hay tickets activos.</div></div>'}`;
 }
 
@@ -2225,8 +2227,14 @@ function tkBuildFaltas(r) {
   });
   r.incompleto = r.faltas.length > 0;
 }
-const tkExtra = r => (r.planilla ? `<div style="font-size:13px"><b>Camión:</b> ${esc(r.planilla.placa)} · <b>Chofer:</b> ${esc(r.planilla.chofer)}</div>` : '')
-  + ((r.faltas || []).length ? (() => { const p = r.faltas.filter(f => fSt(f) === 'pendiente'); return p.length ? `<div style="font-size:13px;color:var(--accent)"><b>INCOMPLETO:</b> ${p.map(f => esc(f.name) + ' faltan ' + nq(f.falta - f.got) + ' ' + uTxt(f.unit)).join('; ')}</div>` : '<div class="small">Faltantes ya cerrados</div>'; })() : '');
+const tkViaje = r => S.viajes.find(v => (v.paradas || []).some(p => p.tk === r.id));
+const tkDestLine = r => { const v = tkViaje(r); if (!v) return r.state === 'encamino' ? '<div style="font-size:13px;color:var(--accent)"><b>Destino:</b> aún sin asignar</div>' : ''; const i = v.paradas.findIndex(p => p.tk === r.id), pa = v.paradas[i]; return `<div style="font-size:13px"><b>Destino:</b> ${esc(pa.lugar)} <span class="small">(parada ${i + 1} de ${v.paradas.length} · ${v.fecha.split('-').reverse().join('/')})</span></div>`; };
+const tkIncBox = r => {
+  const fl = r.faltas || []; if (!fl.length) return ''; const ab = fl.some(f => fSt(f) === 'pendiente'), who = r.verBy || 'Osmerly';
+  return `<div class="panel stack" style="padding:10px;border-color:var(--accent);background:var(--accent-weak)"><div style="font-size:13px;color:var(--accent)"><b>TICKET INCOMPLETO</b> · marcado por ${esc(who)}${r.verTs ? ' el ' + fd(r.verTs) : ''}${ab ? '' : ' · faltantes ya cerrados'}</div><div style="font-size:13px"><b>Descripción:</b> ${esc(r.cliente)} · ${esc(r.tipo || 'Sin tipo de cliente')}${r.nota ? ' — ' + esc(r.nota) : ''}</div>${fl.map(f => `<div style="font-size:13px"><b>${esc(f.name)}</b>: se pidieron ${nq(f.qty)} ${uTxt(f.unit)}, despacho marcó ${nq(f.out)} y faltan <b>${nq(f.falta)}</b> ${uTxt(f.unit)}${f.got ? ' (después se entregaron ' + nq(f.got) + ')' : ''} · ${fSt(f) === 'completo' ? 'completado' : fSt(f) === 'anulado' ? 'no se completará' : 'pendiente'}</div>`).join('')}${ab ? `<div class="small">Recuérdale a ${esc(who)} este pendiente.</div>` : ''}</div>`;
+};
+const tkExtra = (r, noInc) => (r.planilla ? `<div style="font-size:13px"><b>Camión:</b> ${esc(r.planilla.placa)} · <b>Chofer:</b> ${esc(r.planilla.chofer)}</div>` + tkDestLine(r) : '')
+  + ((r.faltas || []).length && !noInc ? (() => { const p = r.faltas.filter(f => fSt(f) === 'pendiente'); return p.length ? `<div style="font-size:13px;color:var(--accent)"><b>INCOMPLETO:</b> ${p.map(f => esc(f.name) + ' faltan ' + nq(f.falta - f.got) + ' ' + uTxt(f.unit)).join('; ')}</div>` : '<div class="small">Faltantes ya cerrados</div>'; })() : '');
 const tkDetail = r => (r.planilla ? `<div class="grid2"><div><div class="small">Chofer</div>${esc(r.planilla.chofer)}</div><div><div class="small">Camión</div>${esc(r.planilla.placa)}</div></div>` : '')
   + ((r.faltas || []).length ? `<div><div class="small">Faltantes (ticket incompleto)</div>${r.faltas.map(f => `<div style="font-size:13px">${esc(f.name)}: pedido ${nq(f.qty)}, despachado ${nq(f.out)}, falta <b>${nq(f.falta)}</b> ${uTxt(f.unit)}, recibido ${nq(f.got)} · ${fSt(f) === 'completo' ? 'completado' : fSt(f) === 'anulado' ? 'no se completará' : 'pendiente'}</div>`).join('')}</div>` : '');
 
@@ -2234,13 +2242,13 @@ const tkDetail = r => (r.planilla ? `<div class="grid2"><div><div class="small">
 ACT.tkplan = t => {
   const r = S.tk.find(x => x.id === t.dataset.id); if (!r) return; const p = r.planilla || {};
   const uniq = k => [...new Set(S.tk.map(x => x.planilla && x.planilla[k]).filter(Boolean))].map(v => `<option value="${esc(v)}">`).join('');
-  openModal(`<div class="modal"><form data-form="tkplan" data-id="${r.id}"><div class="modal-h"><h2 style="margin:0">Planilla de salida del camión</h2></div><div class="modal-b stack"><div class="muted">${esc(r.cliente)} · ${esc(r.no)}. Marca el producto que se lleva el camión y los kilos. Almacén descuenta lo que registres aquí.</div>
+  openModal(`<div class="modal"><form data-form="tkplan" data-id="${r.id}"><div class="modal-h"><h2 style="margin:0">Planilla de salida del camión</h2></div><div class="modal-b stack"><div class="muted">${esc(r.cliente)} · ${esc(r.no)}. Marca el producto que se lleva el camión y los kilos. Después asigna el destino; cuando el camión llegue sin novedades el ticket pasa a Yorgely, que descuenta lo que registres aquí.</div>
   <div class="grid2"><label>Chofer<input name="chofer" list="dl_ch" required value="${esc(p.chofer || '')}"></label><label>Camión / placa<input name="placa" list="dl_pl" required value="${esc(p.placa || '')}"></label></div><datalist id="dl_ch">${uniq('chofer')}</datalist><datalist id="dl_pl">${uniq('placa')}</datalist>
   ${r.items.map((x, i) => { const pi = (p.items || []).find(y => y.pid === x.pid), on = p.items ? !!pi : (+x.out || 0) > 0, kg = pi ? pi.kg : (x.out != null ? x.out : x.qty); return `<div class="between" style="gap:10px"><label class="row" style="gap:8px;flex:2"><input type="checkbox" name="s${i}" ${on ? 'checked' : ''} style="width:auto"><span><b>${esc(x.name)}</b> <span class="small">pedido ${nq(x.qty)} ${uTxt(x.unit)}${x.pend ? ' · PENDIENTE' : ''}</span></span></label><label style="flex:1">${x.unit === 'kg' ? 'Kilos' : 'Unidades'}<input name="k${i}" type="number" min="0" step="any" value="${kg}"></label></div>`; }).join('')}
-  <label>Observaciones<textarea name="obs" rows="2">${esc(p.obs || '')}</textarea></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar planilla y enviar a almacén</button></div></form></div>`);
+  <label>Observaciones<textarea name="obs" rows="2">${esc(p.obs || '')}</textarea></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar planilla</button></div></form></div>`);
 };
 FORM.tkplan = f => {
-  const r = S.tk.find(x => x.id === f.dataset.id); if (!r || !['confirmado', 'planilla'].includes(r.state)) { closeModal(); return toast('Este ticket ya no está en tu bandeja'); }
+  const r = S.tk.find(x => x.id === f.dataset.id); if (!r || !['confirmado', 'encamino', 'planilla'].includes(r.state)) { closeModal(); return toast('Este ticket ya no está en tu bandeja'); }
   const chofer = f.chofer.value.trim(), placa = f.placa.value.trim(), obs = f.obs.value.trim(); if (!chofer || !placa) return toast('Escribe el chofer y el camión');
   const its = [];
   for (let i = 0; i < r.items.length; i++) {
@@ -2255,9 +2263,9 @@ FORM.tkplan = f => {
     r.items.forEach(x => { const y = its.find(z => z.pid === x.pid), nv = y ? y.kg : 0; if (nv !== (+x.out || 0)) x.out = nv; x.pend = (+x.out || 0) < +x.qty; });
     tkBuildFaltas(r);
     r.planilla = { chofer, placa, obs, items: its, ts: (r.planilla || {}).ts || now, upd: now, by: dn(cur()) };
-    r.state = 'planilla'; r.planTs = r.planTs || now;
+    if (r.state === 'confirmado') r.state = 'encamino'; r.planTs = r.planTs || now;
     tkLog(r, (first ? 'Planilla de salida registrada' : 'Planilla de salida editada') + ': chofer ' + chofer + ', camión ' + placa + (diffs.length ? ' (ajustó cantidades respecto a lo verificado: ' + diffs.map(x => x.name).join(', ') + ')' : ''));
-    save(); closeModal(); toast('Planilla guardada: enviada a almacén'); render();
+    save(); closeModal(); toast(first ? 'Planilla guardada: ahora asigna el destino y marca cuando el camión llegue' : 'Planilla actualizada'); render();
   };
   if (diffs.length) askConfirm('Estas cantidades no coinciden con lo verificado por Osmerly (' + diffs.map(x => x.name).join(', ') + '). Almacén descontará lo que registres aquí y lo que quede por debajo de lo pedido pasa a Tickets incompletos. ¿Continuar?', apply, 'Continuar'); else apply();
 };
@@ -2265,7 +2273,7 @@ function vPla() {
   const rs = S.tk.filter(r => r.planilla).sort((a, b) => b.planilla.ts - a.planilla.ts);
   const b = (a, l, id, c = '') => `<button class="btn sm ${c}" data-act="${a}" data-id="${id}">${l}</button>`;
   return `<div class="between"><div><h1>Planillas de salida</h1><p class="sub">Planillas de los camiones. Imprime la versión <b>con firmas</b> (para el chofer y quien recibe) o la versión <b>sin firma</b> para enviar a cobranza.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
-  ${rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(r => `<div class="panel stack"><div class="between"><div><b>${esc(r.cliente)}</b><div class="small">${esc(r.no)} · ${fmt(r.planilla.ts)}</div></div>${tkP(r.state)}</div><div style="font-size:13px"><b>Chofer:</b> ${esc(r.planilla.chofer)} · <b>Camión:</b> ${esc(r.planilla.placa)}</div>${r.planilla.items.map(i => `<div class="between" style="font-size:13px"><span>${esc(i.name)}</span><b>${nq(i.kg)} ${uTxt(i.unit)}</b></div>`).join('')}${tkExtra(r)}<div class="row" style="flex-wrap:wrap">${b('tkview', 'Ver', r.id)}${b('tkplpdf', 'Imprimir con firmas', r.id, 'primary')}${b('tkplpdfn', 'Imprimir sin firma (cobranza)', r.id)}${r.state === 'planilla' ? b('tkplan', 'Editar', r.id) : ''}</div></div>`).join('')}</div>` : '<div class="tw"><div class="empty">Aún no has registrado planillas de salida.</div></div>'}`;
+  ${rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">${rs.map(r => `<div class="panel stack"><div class="between"><div><b>${esc(r.cliente)}</b><div class="small">${esc(r.no)} · ${fmt(r.planilla.ts)}</div></div>${tkP(r.state)}</div><div style="font-size:13px"><b>Chofer:</b> ${esc(r.planilla.chofer)} · <b>Camión:</b> ${esc(r.planilla.placa)}</div>${r.planilla.items.map(i => `<div class="between" style="font-size:13px"><span>${esc(i.name)}</span><b>${nq(i.kg)} ${uTxt(i.unit)}</b></div>`).join('')}${tkExtra(r)}<div class="row" style="flex-wrap:wrap">${b('tkview', 'Ver', r.id)}${b('tkplpdf', 'Imprimir con firmas', r.id, 'primary')}${b('tkplpdfn', 'Imprimir sin firma (cobranza)', r.id)}${['encamino', 'planilla'].includes(r.state) ? b('tkplan', 'Editar', r.id) : ''}</div></div>`).join('')}</div>` : '<div class="tw"><div class="empty">Aún no has registrado planillas de salida.</div></div>'}`;
 }
 async function plSalPdf(r, signed) {
   toast('Preparando PDF…'); let d;
@@ -2294,13 +2302,13 @@ let VOPTS = '';
 const vTkOpts = (cur0, id) => S.tk.filter(r => r.planilla && (r.id === cur0 || !S.viajes.some(v => v.id !== id && v.paradas.some(p => p.tk === r.id)))).map(r => `<option value="${esc(r.id)}" ${r.id === cur0 ? 'selected' : ''}>${esc(r.no)} · ${esc(r.cliente)}</option>`).join('');
 const vRow = (p, i, id) => `<div class="panel stack vrow" data-pid="${esc(p.id || '')}" style="padding:10px"><div class="row" style="flex-wrap:wrap"><b class="vn">${i + 1}</b><select name="vt" data-chg="vstk" style="flex:1;min-width:150px"><option value="">Ticket (opcional)</option>${vTkOpts(p.tk, id)}</select><input name="vl" placeholder="Lugar / destino" required value="${esc(p.lugar || '')}" style="flex:2;min-width:150px"></div><div class="row" style="flex-wrap:wrap"><label class="row">Llegada<input name="va" type="time" value="${esc(p.lleg || '')}" style="width:auto"></label><label class="row">Salida<input name="vs" type="time" value="${esc(p.sal || '')}" style="width:auto"></label><button type="button" class="btn sm" data-act="vup" title="Subir">↑</button><button type="button" class="btn sm" data-act="vdn" title="Bajar">↓</button><button type="button" class="btn sm danger" data-act="vrm" title="Quitar">✕</button></div></div>`;
 const vRenum = () => $$('.vrow .vn').forEach((e, i) => { e.textContent = i + 1; });
-function vModal(id) {
-  const v = id ? S.viajes.find(x => x.id === id) : null; VOPTS = id || '';
+function vModal(id, tkId) {
+  const v = id ? S.viajes.find(x => x.id === id) : null; VOPTS = id || ''; const tk0 = tkId ? S.tk.find(x => x.id === tkId) : null, pre = (tk0 && tk0.planilla) || {};
   const dl = k => [...new Set(S.tk.map(x => x.planilla && x.planilla[k]).filter(Boolean))].map(x => `<option value="${esc(x)}">`).join('');
   openModal(`<div class="modal wide"><form data-form="viaje" data-id="${id || ''}"><div class="modal-h"><h2 style="margin:0">${v ? 'Editar destino del camión' : 'Nuevo destino del camión'}</h2></div><div class="modal-b stack"><div class="muted">Agrega las paradas en el <b>orden en que pasa el camión</b>. Puedes llenar las horas ahora o marcarlas después con un botón.</div>
   <div class="grid2"><label>Fecha<input type="date" name="fecha" required value="${v ? v.fecha : fIso(new Date())}"></label><label>Hora de salida del almacén<input type="time" name="salida" value="${v ? esc(v.salida || '') : ''}"></label></div>
-  <div class="grid2"><label>Chofer<input name="chofer" list="dl_ch2" required value="${v ? esc(v.chofer) : ''}"></label><label>Camión / placa<input name="placa" list="dl_pl2" required value="${v ? esc(v.placa) : ''}"></label></div><datalist id="dl_ch2">${dl('chofer')}</datalist><datalist id="dl_pl2">${dl('placa')}</datalist>
-  <div id="vrows" class="stack">${(v ? v.paradas : [{}]).map((p, i) => vRow(p, i, id)).join('')}</div><button type="button" class="btn sm" data-act="vadd">+ Añadir parada</button>
+  <div class="grid2"><label>Chofer<input name="chofer" list="dl_ch2" required value="${v ? esc(v.chofer) : esc(pre.chofer || '')}"></label><label>Camión / placa<input name="placa" list="dl_pl2" required value="${v ? esc(v.placa) : esc(pre.placa || '')}"></label></div><datalist id="dl_ch2">${dl('chofer')}</datalist><datalist id="dl_pl2">${dl('placa')}</datalist>
+  <div id="vrows" class="stack">${(v ? v.paradas : [tk0 ? { tk: tk0.id, lugar: tk0.cliente } : {}]).map((p, i) => vRow(p, i, id)).join('')}</div><button type="button" class="btn sm" data-act="vadd">+ Añadir parada</button>
   <label>Hora de regreso al almacén (opcional)<input type="time" name="regreso" value="${v ? esc(v.regreso || '') : ''}"></label></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary">Guardar</button></div></form></div>`);
 }
 FORM.viaje = f => {
@@ -2326,6 +2334,12 @@ function vPdf(v) {
   }).catch(() => toast('No se pudo cargar el generador de PDF. Revisa tu conexión a internet.'));
 }
 Object.assign(ACT, {
+  tkdest: t => { const r = S.tk.find(x => x.id === t.dataset.id); if (!r || r.state !== 'encamino') return; const v = tkViaje(r); v ? vModal(v.id) : vModal('', r.id); },
+  tkarr: t => {
+    const r = S.tk.find(x => x.id === t.dataset.id); if (!r || r.state !== 'encamino') return toast('Este ticket ya no está en camino');
+    if (!tkViaje(r)) return toast('Primero asigna el destino de este ticket (botón "Asignar destino")');
+    askConfirm('¿Confirmas que el camión llegó al destino sin novedades? El ticket pasará a Yorgely (almacén).', () => { const x = S.tk.find(y => y.id === r.id); if (!x || x.state !== 'encamino') return; x.state = 'planilla'; x.llegoTs = Date.now(); x.llegoBy = dn(cur()); tkLog(x, 'Camión llegó al destino sin novedades; ticket enviado a Yorgely (almacén)'); save(); toast('Ticket enviado a Yorgely'); render(); }, 'Sí, enviar a Yorgely');
+  },
   vnew: () => vModal(''), vedit: t => vModal(t.dataset.id), vpdf: t => { const v = S.viajes.find(x => x.id === t.dataset.id); if (v) vPdf(v); },
   vdel: t => askConfirm('¿Eliminar este destino de camión?', () => { S.viajes = S.viajes.filter(x => x.id !== t.dataset.id); save(); render(); }, 'Eliminar'),
   vadd: () => { const box = $('#vrows'); box.insertAdjacentHTML('beforeend', vRow({}, box.children.length, VOPTS)); vRenum(); },
@@ -2347,10 +2361,10 @@ function vRut() {
 ACT.incf = t => { ui.incf = t.dataset.k; render(); };
 function vInc() {
   const f = ui.incf || 'ab', all = S.tk.filter(r => r.state !== 'cancelado' && (r.faltas || []).length).sort((a, b) => (b.verTs || 0) - (a.verTs || 0)), ab = incOpen(), ce = all.filter(r => !ab.includes(r)), rs = f === 'ab' ? ab : ce;
-  const card = r => `<div class="panel stack" style="position:relative">${cowBadge(r)}<div class="between"><div><b>${esc(r.cliente)}</b><div class="small">${esc(r.no)} · confirmado ${fd(r.verTs)}${r.planilla ? ' · camión ' + esc(r.planilla.placa) : ''}</div></div>${tkP(r.state)}</div>
+  const card = r => `<div class="panel stack" style="position:relative">${cowBadge(r)}<div class="between"><div><b>${esc(r.cliente)}</b><div class="small">${esc(r.no)} · marcado incompleto por ${esc(r.verBy || 'Osmerly')} ${fd(r.verTs)}${r.planilla ? ' · camión ' + esc(r.planilla.placa) : ''}</div></div>${tkP(r.state)}</div><div class="muted" style="font-size:13px"><b>Descripción:</b> ${esc(r.tipo || 'Sin tipo de cliente')}${r.nota ? ' — ' + esc(r.nota) : ''}</div>
   ${r.faltas.map(x => `<div class="panel stack" style="padding:10px"><div class="between"><b>${esc(x.name)}</b>${fPill(x)}</div><div class="small">Pedido ${nq(x.qty)} · Despachado ${nq(x.out)} · <b>Falta ${nq(x.falta)}</b> · Recibido ${nq(x.got)} ${uTxt(x.unit)}</div>${x.hist.map(h => `<div class="small">${fd(h.ts)} · entregó ${nq(h.qty)} ${uTxt(x.unit)} (${esc(h.by)})${h.nota ? ' · ' + esc(h.nota) : ''}</div>`).join('')}${x.anulado ? `<div class="small">${esc(x.anulado.motivo)} (${esc(x.anulado.by)})</div>` : ''}${fSt(x) === 'pendiente' ? `<div class="row" style="flex-wrap:wrap"><button class="btn sm primary" data-act="fent" data-id="${r.id}" data-p="${esc(x.pid)}">Registrar entrega</button><button class="btn sm danger" data-act="fanul" data-id="${r.id}" data-p="${esc(x.pid)}">No se completará</button></div>` : ''}</div>`).join('')}
   <div class="row" style="flex-wrap:wrap"><button class="btn sm" data-act="tkview" data-id="${r.id}">Ver</button><button class="btn sm" data-act="tknotes" data-id="${r.id}">Notas${tkNotes(r).length ? ' (' + tkNotes(r).length + ')' : ''}</button></div></div>`;
-  return `<div class="between"><div><h1>Tickets incompletos</h1><p class="sub">Pedidos que Leovanny marcó como pendientes y Osmerly confirmó. Lleva el control de la diferencia y registra cuando se entrega después.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
+  return `<div class="between"><div><h1>Tickets incompletos</h1><p class="sub">Pedidos que Leovanny marcó como pendientes y Osmerly te envió como incompletos. Aquí ves cuánto se pidió y cómo se entregó para recordarle a Osmerly el pendiente; registra también cuando se entrega después.</p></div><button class="btn" data-act="refresh">Actualizar</button></div>
   <div class="tabs" style="max-width:420px;margin-bottom:12px">${[['ab', 'Abiertos (' + ab.length + ')'], ['ce', 'Cerrados (' + ce.length + ')']].map(([k, l]) => `<button data-act="incf" data-k="${k}" class="${f === k ? 'on' : ''}">${l}</button>`).join('')}</div>
   ${rs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px">${rs.map(card).join('')}</div>` : '<div class="tw"><div class="empty">No hay tickets incompletos aquí.</div></div>'}`;
 }
@@ -2450,8 +2464,8 @@ function nItems() {
   if (u.role === 'tk_desp') S.tk.filter(r => r.state === 'enviado').forEach(r => o.push(['td|' + r.id, 'Nuevo ticket de ' + r.cliente, r.no]));
   if (u.role === 'tk_desp') S.tk.filter(r => r.state === 'devuelto').forEach(r => o.push(['tdv|' + r.id, 'Ticket devuelto por verificación: ' + r.cliente, r.no]));
   if (u.role === 'tk_ver') S.tk.filter(r => r.state === 'salida').forEach(r => o.push(['tv|' + r.id, 'Ticket por verificar: ' + r.cliente, r.no]));
-  if (u.role === 'tk_alm') S.tk.filter(r => r.state === 'planilla').forEach(r => o.push(['ta|' + r.id, 'Planilla de salida lista: da la salida del almacén', r.cliente + ' · ' + r.no]));
-  if (u.role === 'tk_anal') { S.tk.filter(r => r.state === 'confirmado').forEach(r => o.push(['tn|' + r.id, 'Pedido confirmado: registra la salida del camión', r.cliente + ' · ' + r.no])); incOpen().forEach(r => o.push(['tf|' + r.id, 'Ticket incompleto: control de faltantes', r.cliente + ' · ' + r.no])); }
+  if (u.role === 'tk_alm') S.tk.filter(r => r.state === 'planilla').forEach(r => o.push(['ta|' + r.id, 'El camión llegó sin novedades: da la salida del almacén', r.cliente + ' · ' + r.no]));
+  if (u.role === 'tk_anal') { S.tk.filter(r => r.state === 'confirmado').forEach(r => o.push(['tn|' + r.id, 'Osmerly te envió un pedido: registra la planilla y asigna el destino', r.cliente + ' · ' + r.no])); incOpen().forEach(r => o.push(['tf|' + r.id, 'Ticket incompleto marcado por Osmerly: recuérdale el pendiente', r.cliente + ' · ' + r.no])); }
   if (u.role === 'cobranza') { S.tk.filter(r => r.state === 'cobranza').forEach(r => o.push(['tc|' + r.id, 'Nuevo ticket en cobranza', r.cliente + ' · ' + r.no])); S.mant.filter(r => r.state === 'cobranza').forEach(r => o.push(['mq|' + r.id, 'Solicitud de pedido firmada recibida', r.place])); }
   if (u.role === 'admin') S.msgs.forEach(m => o.push(['msg|' + m.id, 'Nuevo mensaje de ' + m.uname, m.subject || '']));
   if (u.role === 'admin_ti') S.ti.filter(r => r.state === 'pendiente').forEach(r => o.push(['ti|' + r.id, 'Nueva solicitud TI de ' + r.uname, r.cat + (r.dept ? ' · ' + r.dept : '')]));
