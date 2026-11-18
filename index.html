@@ -398,7 +398,7 @@ async function enter() {
   try { await loadAll(); } catch (e) { toast('Error al cargar: ' + (e.message || e)); return; }
   const u = S.users.find(x => x.id === session.user.id);
   if (!u) { await SB.auth.signOut(); ui.user = null; ui.err = 'Tu cuenta fue eliminada'; return render(); }
-  ui.user = u.id; ui.err = ''; ui.view = u.role === 'admin' ? 'resumen' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'recv' : u.role === 'admin_ti' ? 'wait' : u.role === 'gerente_mant' ? 'gq' : u.role === 'rrhh' ? 'rasis' : TKN[u.role] ? TKN[u.role][0][0] : 'all'; ui.st = null; ui.uview = 'desk'; ui.rs = ui.rcat = ui.rdep = ''; ui.h = {}; NSEEN = null; notifyScan(); render(); rtStart();
+  ui.user = u.id; ui.err = ''; ui.view = u.role === 'admin' ? 'resumen' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'recv' : u.role === 'admin_ti' ? 'wait' : u.role === 'gerente_mant' ? 'gq' : u.role === 'rrhh' ? 'rasis' : TKN[u.role] ? TKN[u.role][0][0] : 'all'; ui.st = null; ui.uview = 'desk'; ui.mode = 'user'; ui.rs = ui.rcat = ui.rdep = ''; ui.h = {}; NSEEN = null; notifyScan(); render(); rtStart();
 }
 /* Archivos: Supabase Storage (bucket privado "documentos") */
 const MAX_BYTES = 10 * 1024 * 1024 * 1024;
@@ -423,6 +423,7 @@ const idbGet = async id => { const { data, error } = await SB.storage.from('docu
 const idbDel = id => SB.storage.from('documentos').remove([id]).catch(() => {});
 try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
 
+const ownView = u => u.role === 'admin' ? 'resumen' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'recv' : u.role === 'admin_ti' ? 'wait' : u.role === 'gerente_mant' ? 'gq' : u.role === 'rrhh' ? 'rasis' : TKN[u.role] ? TKN[u.role][0][0] : 'all';
 const ui = { user: null, tab: 'login', view: 'resumen', uview: 'desk', logUser: '', err: '' };
 const cur = () => S.users.find(x => x.id === ui.user);
 const dn = u => (u && (u.full || u.name)) || '';
@@ -513,9 +514,10 @@ function render() {
   const app = $('#app');
   if (!ui.user) { app.className = ''; app.innerHTML = viewAuth(); return; }
   const u = cur(); if (!u) { ui.user = null; return render(); }
-  app.className = u.role === 'admin' ? '' : 'gw';
-  app.innerHTML = u.role === 'admin' ? viewAdmin() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : u.role === 'rrhh' ? viewRH() : TKR[u.role] ? viewTK() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser();
-  if (u.role === 'admin' && ui.view === 'subir') initUpload();
+  const own = u.role !== 'user' && ui.mode === 'own';
+  app.className = own && u.role === 'admin' ? '' : 'gw';
+  app.innerHTML = !own ? viewUser() : '<button class="btn sm" data-act="home" style="position:fixed;right:16px;bottom:16px;z-index:60">⌂ Inicio</button>' + (u.role === 'admin' ? viewAdmin() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : u.role === 'rrhh' ? viewRH() : TKR[u.role] ? viewTK() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser());
+  if (own && u.role === 'admin' && ui.view === 'subir') initUpload();
   if (STROLES.includes(u.role) && ui.view === 'stats') tiStatsDraw();
 }
 
@@ -1012,6 +1014,8 @@ const ACT = {
   logout: () => { SB.auth.signOut(); ui.user = null; ui.tab = 'login'; ui.err = ''; closeModal(); render(); },
   nav: t => { ui.view = t.dataset.v; render(); window.scrollTo(0, 0); },
   unav: t => { ui.uview = t.dataset.v; render(); },
+  home: () => { ui.mode = 'user'; ui.uview = 'desk'; ui.view = ownView(cur()); render(); },
+  own: () => { const u = cur(); ui.mode = 'own'; ui.view = ownView(u); ui.st = null; ui.rs = ui.rcat = ui.rdep = ''; render(); },
   folder: t => { ui.uview = 'folder:' + t.dataset.v; render(); },
   close: (t, e) => { if (t.classList.contains('overlay') && e.target !== t) return; closeModal(); },
   doconfirm: () => { const cb = confirmCb; confirmCb = null; closeModal(); cb && cb(); },
@@ -1194,9 +1198,14 @@ function uReq(k) {
 }
 const uTI = () => uReq('ti'), uMant = () => uReq('mant');
 function uDesk() {
-  const u = cur(), open = k => k === 'sdoc' ? S.sdoc.filter(r => r.uid === u.id && r.state === 'pendiente').length : S[k].filter(r => r.uid === u.id && !['aprobada', 'aceptada', 'cerrada'].includes(r.state) && !(k === 'mant' && r.state === 'terminada')).length;
-  const mods = [['lib', 'Biblioteca GILACA', 'Documentos públicos, tuyos y de tu departamento', I.globe], ['ti', 'Solicitudes TI', 'Impresora, internet, tinta, papel y más', I.pc], ['mant', 'Solicitudes de mantenimiento', 'Oficinas, comedor, baños y otros lugares', I.wrench], ['sdoc', 'Solicitar documento', 'Elaborar, actualizar o desincorporar un documento', I.globe]];
-  return `<h1>Inicio</h1><p class="sub">Elige un módulo.</p><div class="folders">${mods.map(([k, t, s, ic]) => `<button class="folder" data-act="unav" data-v="${k}">${ic}<b>${t}</b><span>${s}${k !== 'lib' && open(k) ? ' · ' + open(k) + ' en curso' : ''}</span></button>`).join('')}</div>`;
+  const u = cur(), r = u.role, open = k => k === 'sdoc' ? S.sdoc.filter(x => x.uid === u.id && x.state === 'pendiente').length : S[k].filter(x => x.uid === u.id && !['aprobada', 'aceptada', 'cerrada'].includes(x.state) && !(k === 'mant' && x.state === 'terminada')).length;
+  const mant = ['mant', 'Administrar mantenimiento', 'Gestiona las solicitudes de mantenimiento que te corresponden'];
+  const OWN = { admin: ['lib', 'Administrar Biblioteca', 'Documentos, usuarios, mensajes y solicitudes de documentos'], admin_ti: ['ti', 'Administrar TI', 'Gestiona las solicitudes y el almacén de TI'], admin_mant: mant, sup_auto: mant, sup_infra: mant, gerente_mant: mant };
+  const EXTRA = { tk_crea: ['Fase 1 del proceso', 'Crea tus clientes y tickets de despacho'], tk_desp: ['Vamos a almacenar y a despachar', 'Almacén, salida para el cliente y producción'], tk_ver: ['Vamos a verificar', 'Verifica lo que despacho marcó'], tk_anal: ['Vamos a despachar', 'Choferes, pedidos saliendo, destinos y planillas'], tk_alm: ['Vamos a confirmar', 'Confirma la salida del almacén'], cobranza: ['Vamos a facturar', 'Tickets recibidos y pedidos de mantenimiento'], rrhh: ['Talento Humano', 'Asistencia y personal'] };
+  const base = [['lib', 'Biblioteca GILACA', 'Documentos públicos, tuyos y de tu departamento', I.globe], ['ti', 'Solicitudes TI', 'Impresora, internet, tinta, papel y más', I.pc], ['mant', 'Solicitudes de mantenimiento', 'Oficinas, comedor, baños y otros lugares', I.wrench], ['sdoc', 'Solicitar documento', 'Elaborar, actualizar o desincorporar un documento', I.globe]];
+  const o = OWN[r], mods = base.filter(m => !(r === 'admin' && m[0] === 'sdoc')).map(m => o && o[0] === m[0] ? [m[0], o[1], o[2], m[3], 1] : m);
+  if (EXTRA[r]) mods.push(['own', EXTRA[r][0], EXTRA[r][1], I.team, 1]);
+  return `<h1>Inicio</h1><p class="sub">Elige un módulo.</p><div class="folders">${mods.map(([k, t, s, ic, own]) => `<button class="folder" data-act="${own ? 'own' : 'unav'}" data-v="${k}">${ic}<b>${t}</b><span>${s}${!own && k !== 'lib' && open(k) ? ' · ' + open(k) + ' en curso' : ''}</span></button>`).join('')}</div>`;
 }
 function viewAdminMod(k) {
   const c = CFG[k], u = cur(), v = ui.view, cnt = s => S[k].filter(r => r.state === s).length;
