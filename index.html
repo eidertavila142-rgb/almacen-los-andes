@@ -398,7 +398,7 @@ async function enter() {
   try { await loadAll(); } catch (e) { toast('Error al cargar: ' + (e.message || e)); return; }
   const u = S.users.find(x => x.id === session.user.id);
   if (!u) { await SB.auth.signOut(); ui.user = null; ui.err = 'Tu cuenta fue eliminada'; return render(); }
-  ui.user = u.id; ui.err = ''; ui.view = u.role === 'admin' ? 'resumen' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'recv' : u.role === 'admin_ti' ? 'estado' : u.role === 'gerente_mant' ? 'gq' : u.role === 'rrhh' ? 'rasis' : TKN[u.role] ? TKN[u.role][0][0] : 'all'; ui.st = null; ui.uview = 'desk'; ui.mode = 'user'; ui.rs = ui.rcat = ui.rdep = ''; ui.h = {}; NSEEN = null; notifyScan(); render(); rtStart();
+  ui.user = u.id; ui.err = ''; ui.view = u.role === 'admin' ? 'resumen' : u.role === 'admin_sdoc' ? 'sdoc' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'recv' : u.role === 'admin_ti' ? 'estado' : u.role === 'gerente_mant' ? 'gq' : u.role === 'rrhh' ? 'rasis' : TKN[u.role] ? TKN[u.role][0][0] : 'all'; ui.st = null; ui.uview = 'desk'; ui.mode = 'user'; ui.rs = ui.rcat = ui.rdep = ''; ui.h = {}; NSEEN = null; notifyScan(); render(); rtStart();
 }
 /* Archivos: Supabase Storage (bucket privado "documentos") */
 const MAX_BYTES = 10 * 1024 * 1024 * 1024;
@@ -423,7 +423,7 @@ const idbGet = async id => { const { data, error } = await SB.storage.from('docu
 const idbDel = id => SB.storage.from('documentos').remove([id]).catch(() => {});
 try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
 
-const ownView = u => u.role === 'admin' ? 'resumen' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'recv' : u.role === 'admin_ti' ? 'estado' : u.role === 'gerente_mant' ? 'gq' : u.role === 'rrhh' ? 'rasis' : TKN[u.role] ? TKN[u.role][0][0] : 'all';
+const ownView = u => u.role === 'admin' ? 'resumen' : u.role === 'admin_sdoc' ? 'sdoc' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'recv' : u.role === 'admin_ti' ? 'estado' : u.role === 'gerente_mant' ? 'gq' : u.role === 'rrhh' ? 'rasis' : TKN[u.role] ? TKN[u.role][0][0] : 'all';
 const ui = { user: null, tab: 'login', view: 'resumen', uview: 'desk', logUser: '', err: '' };
 const cur = () => S.users.find(x => x.id === ui.user);
 const dn = u => (u && (u.full || u.name)) || '';
@@ -516,7 +516,7 @@ function render() {
   const u = cur(); if (!u) { ui.user = null; return render(); }
   const own = u.role !== 'user' && ui.mode === 'own';
   app.className = own && u.role === 'admin' ? '' : 'gw';
-  app.innerHTML = !own ? viewUser() : '<button class="btn sm" data-act="home" style="position:fixed;right:16px;bottom:16px;z-index:60">⌂ Inicio</button>' + (u.role === 'admin' ? viewAdmin() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : u.role === 'rrhh' ? viewRH() : TKR[u.role] ? viewTK() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser());
+  app.innerHTML = !own ? viewUser() : '<button class="btn sm" data-act="home" style="position:fixed;right:16px;bottom:16px;z-index:60">⌂ Inicio</button>' + (u.role === 'admin' ? viewAdmin() : u.role === 'admin_sdoc' ? viewSdoc() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : u.role === 'rrhh' ? viewRH() : TKR[u.role] ? viewTK() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser());
   if (own && u.role === 'admin' && ui.view === 'subir') initUpload();
   if (STROLES.includes(u.role) && ui.view === 'stats') tiStatsDraw();
 }
@@ -544,11 +544,11 @@ function viewAuth() {
 /* ============ Panel del administrador ============ */
 function viewAdmin() {
   const unread = S.msgs.filter(m => !m.read).length;
-  const nav = [['resumen','Resumen'],['docs','Documentos'],['sdoc','Solicitudes de documentos'],['subir','Subir documento'],['users','Usuarios'],['newu','Crear usuario'],['mail','Enviar correo'],['depts','Departamentos'],['cargos','Cargos'],['trash','Papelera'],['archive','Archivo'],['log','Historial'],['msgs','Mensajes'],['cuenta','Mi cuenta']];
-  const V = { resumen: vResumen, docs: vDocs, sdoc: vASdoc, subir: vSubir, users: vUsers, newu: vNewU, mail: vMail, depts: vDepts, cargos: vCargos, trash: vTrash, archive: vArchive, log: vLog, msgs: vMsgs, cuenta: vCuenta };
+  const nav = [['resumen','Resumen'],['docs','Documentos'],['subir','Subir documento'],['users','Usuarios'],['newu','Crear usuario'],['mail','Enviar correo'],['depts','Departamentos'],['cargos','Cargos'],['trash','Papelera'],['archive','Archivo'],['log','Historial'],['msgs','Mensajes'],['cuenta','Mi cuenta']];
+  const V = { resumen: vResumen, docs: vDocs, subir: vSubir, users: vUsers, newu: vNewU, mail: vMail, depts: vDepts, cargos: vCargos, trash: vTrash, archive: vArchive, log: vLog, msgs: vMsgs, cuenta: vCuenta };
   return `<div class="shell"><aside>
     <div class="brand">${I.logo} <span>GilApp</span></div>
-    <nav>${nav.map(([k, l]) => `<button data-act="nav" data-v="${k}" class="${ui.view === k ? 'on' : ''}">${l}${k === 'msgs' && unread ? `<span class="badge">${unread}</span>` : ''}${k === 'sdoc' && sdPend() ? `<span class="badge">${sdPend()}</span>` : ''}</button>`).join('')}</nav>
+    <nav>${nav.map(([k, l]) => `<button data-act="nav" data-v="${k}" class="${ui.view === k ? 'on' : ''}">${l}${k === 'msgs' && unread ? `<span class="badge">${unread}</span>` : ''}</button>`).join('')}</nav>
     <div class="aside-foot"><div class="company">Ganadería Industrial Los Andes, C.A.</div><div style="font-weight:600">${esc(dn(cur()))}</div><div class="muted" style="font-size:12px;margin-bottom:6px">Administrador · Biblioteca</div><button class="link" data-act="logout">Cerrar sesión</button></div>
   </aside><main>${V[ui.view]()}</main></div>`;
 }
@@ -699,7 +699,7 @@ function userForm(u) {
       <label>Cargo<select name="cargo"><option value="">Sin cargo</option>${S.cargos.map(c => `<option ${u.cargo === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
       <div class="grid2">
         <label>Departamento<select name="dept"><option value="" ${!u.dept ? 'selected' : ''}>Sin asignar</option>${S.depts.map(d => `<option ${u.dept === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></label>
-        <label>Rol<select name="role"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin Biblioteca</option><option value="admin_ti" ${u.role === 'admin_ti' ? 'selected' : ''}>Admin TI</option><option value="sup_auto" ${u.role === 'sup_auto' ? 'selected' : ''}>Supervisor de Automotriz</option><option value="sup_infra" ${u.role === 'sup_infra' ? 'selected' : ''}>Supervisor de Infraestructura</option><option value="gerente_mant" ${u.role === 'gerente_mant' ? 'selected' : ''}>Gerente de Mantenimiento</option><option value="tk_crea" ${u.role === 'tk_crea' ? 'selected' : ''}>Atención al cliente (tickets)</option><option value="tk_desp" ${u.role === 'tk_desp' ? 'selected' : ''}>Despacho</option><option value="tk_ver" ${u.role === 'tk_ver' ? 'selected' : ''}>Verificación de tickets</option><option value="tk_anal" ${u.role === 'tk_anal' ? 'selected' : ''}>Analista de despacho</option><option value="tk_alm" ${u.role === 'tk_alm' ? 'selected' : ''}>Almacén</option><option value="cobranza" ${u.role === 'cobranza' ? 'selected' : ''}>Facturación</option><option value="rrhh" ${u.role === 'rrhh' ? 'selected' : ''}>Talento Humano</option></select></label>
+        <label>Rol<select name="role"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin Biblioteca</option><option value="admin_sdoc" ${u.role === 'admin_sdoc' ? 'selected' : ''}>Admin Solicitudes de documentos</option><option value="admin_ti" ${u.role === 'admin_ti' ? 'selected' : ''}>Admin TI</option><option value="sup_auto" ${u.role === 'sup_auto' ? 'selected' : ''}>Supervisor de Automotriz</option><option value="sup_infra" ${u.role === 'sup_infra' ? 'selected' : ''}>Supervisor de Infraestructura</option><option value="gerente_mant" ${u.role === 'gerente_mant' ? 'selected' : ''}>Gerente de Mantenimiento</option><option value="tk_crea" ${u.role === 'tk_crea' ? 'selected' : ''}>Atención al cliente (tickets)</option><option value="tk_desp" ${u.role === 'tk_desp' ? 'selected' : ''}>Despacho</option><option value="tk_ver" ${u.role === 'tk_ver' ? 'selected' : ''}>Verificación de tickets</option><option value="tk_anal" ${u.role === 'tk_anal' ? 'selected' : ''}>Analista de despacho</option><option value="tk_alm" ${u.role === 'tk_alm' ? 'selected' : ''}>Almacén</option><option value="cobranza" ${u.role === 'cobranza' ? 'selected' : ''}>Facturación</option><option value="rrhh" ${u.role === 'rrhh' ? 'selected' : ''}>Talento Humano</option></select></label>
       </div>
       <div class="err" id="uerr" hidden></div>
     </div>
@@ -715,7 +715,7 @@ function vNewU() {
     <label>Contraseña<input name="pass" required minlength="8"></label>
     <label>Departamento<select name="dept"><option value="">Sin asignar</option>${S.depts.map(d => `<option>${esc(d)}</option>`).join('')}</select></label>
     <label>Cargo<select name="cargo"><option value="">Sin cargo</option>${S.cargos.map(c => `<option>${esc(c)}</option>`).join('')}</select></label>
-    <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Admin Biblioteca</option><option value="admin_ti">Admin TI</option><option value="sup_auto">Supervisor de Automotriz</option><option value="sup_infra">Supervisor de Infraestructura</option><option value="gerente_mant">Gerente de Mantenimiento</option><option value="tk_crea">Atención al cliente (tickets)</option><option value="tk_desp">Despacho</option><option value="tk_ver">Verificación de tickets</option><option value="tk_anal">Analista de despacho</option><option value="tk_alm">Almacén</option><option value="cobranza">Facturación</option><option value="rrhh">Talento Humano</option></select></label>
+    <label>Rol<select name="role"><option value="user">Usuario</option><option value="admin">Admin Biblioteca</option><option value="admin_sdoc">Admin Solicitudes de documentos</option><option value="admin_ti">Admin TI</option><option value="sup_auto">Supervisor de Automotriz</option><option value="sup_infra">Supervisor de Infraestructura</option><option value="gerente_mant">Gerente de Mantenimiento</option><option value="tk_crea">Atención al cliente (tickets)</option><option value="tk_desp">Despacho</option><option value="tk_ver">Verificación de tickets</option><option value="tk_anal">Analista de despacho</option><option value="tk_alm">Almacén</option><option value="cobranza">Facturación</option><option value="rrhh">Talento Humano</option></select></label>
     <div class="err" id="uerr" hidden></div><div><button class="btn primary">Crear usuario</button></div></form>
   <div class="panel"><h3 style="margin-top:0">Reglas para crear un usuario</h3><ul style="padding-left:18px;line-height:1.7">
     <li>El nombre de usuario solo admite cifras numéricas: la <b>cédula</b>, que funciona como ID.</li>
@@ -1154,7 +1154,7 @@ const FORM = {
 };
 
 /* ============ Módulos 2 (TI) y 3 (Mantenimiento) ============ */
-const RL = { admin: 'Admin Biblioteca', admin_ti: 'Admin TI', admin_mant: 'Admin Mantenimiento', sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura', gerente_mant: 'Gerente de Mantenimiento', tk_crea: 'Atención al cliente (tickets)', tk_desp: 'Despacho', tk_ver: 'Verificación de tickets', tk_alm: 'Almacén', tk_anal: 'Analista de despacho', cobranza: 'Facturación', rrhh: 'Talento Humano', user: 'Usuario' };
+const RL = { admin: 'Admin Biblioteca', admin_sdoc: 'Admin Solicitudes de documentos', admin_ti: 'Admin TI', admin_mant: 'Admin Mantenimiento', sup_auto: 'Supervisor de Automotriz', sup_infra: 'Supervisor de Infraestructura', gerente_mant: 'Gerente de Mantenimiento', tk_crea: 'Atención al cliente (tickets)', tk_desp: 'Despacho', tk_ver: 'Verificación de tickets', tk_alm: 'Almacén', tk_anal: 'Analista de despacho', cobranza: 'Facturación', rrhh: 'Talento Humano', user: 'Usuario' };
 /* Razones de solicitud a TI: las crea el Admin TI (con su prioridad) en el panel "Razones de solicitud"; no hay lista fija */
 const tiCats = () => S.ticat.map(c => c.n);
 const tiR = r => r.reg || r.cat;
@@ -1203,10 +1203,10 @@ const uTI = () => uReq('ti'), uMant = () => uReq('mant');
 function uDesk() {
   const u = cur(), r = u.role, open = k => k === 'sdoc' ? S.sdoc.filter(x => x.uid === u.id && x.state === 'pendiente').length : S[k].filter(x => x.uid === u.id && !['aprobada', 'aceptada', 'cerrada'].includes(x.state) && !(k === 'mant' && x.state === 'terminada')).length;
   const mant = ['mant', 'Administrar mantenimiento', 'Gestiona las solicitudes de mantenimiento que te corresponden'];
-  const OWN = { admin: ['lib', 'Administrar Biblioteca', 'Documentos, usuarios, mensajes y solicitudes de documentos'], admin_ti: ['ti', 'Administrar TI', 'Gestiona las solicitudes y el almacén de TI'], admin_mant: mant, sup_auto: mant, sup_infra: mant, gerente_mant: mant };
+  const OWN = { admin: ['lib', 'Administrar Biblioteca', 'Documentos, usuarios, departamentos, cargos y mensajes'], admin_sdoc: ['sdoc', 'Administrar solicitudes de documentos', 'Revisa, aprueba o rechaza las solicitudes de documentos'], admin_ti: ['ti', 'Administrar TI', 'Gestiona las solicitudes y el almacén de TI'], admin_mant: mant, sup_auto: mant, sup_infra: mant, gerente_mant: mant };
   const EXTRA = { tk_crea: ['Fase 1 del proceso', 'Crea tus clientes y tickets de despacho'], tk_desp: ['Vamos a almacenar y a despachar', 'Almacén, salida para el cliente y producción'], tk_ver: ['Vamos a verificar', 'Verifica lo que despacho marcó'], tk_anal: ['Vamos a despachar', 'Choferes, pedidos saliendo, destinos y planillas'], tk_alm: ['Vamos a confirmar', 'Confirma la salida del almacén'], cobranza: ['Vamos a facturar', 'Tickets recibidos y pedidos de mantenimiento'], rrhh: ['Talento Humano', 'Asistencia y personal'] };
   const base = [['lib', 'Biblioteca GILACA', 'Documentos públicos, tuyos y de tu departamento', I.globe], ['ti', 'Soporte técnico (TI)', 'Impresora, internet, tinta, papel y más', I.pc], ['mant', 'Solicitudes de mantenimiento', 'Oficinas, comedor, baños y otros lugares', I.wrench], ['sdoc', 'Solicitar documento', 'Elaborar, actualizar o desincorporar un documento', I.globe]];
-  const o = OWN[r], mods = base.filter(m => !(r === 'admin' && m[0] === 'sdoc')).map(m => o && o[0] === m[0] ? [m[0], o[1], o[2], m[3], 1] : m);
+  const o = OWN[r], mods = base.map(m => o && o[0] === m[0] ? [m[0], o[1], o[2], m[3], 1] : m);
   if (EXTRA[r]) mods.push(['own', EXTRA[r][0], EXTRA[r][1], I.team, 1]);
   return `<h1>Inicio</h1><p class="sub">Elige un módulo.</p><div class="folders">${mods.map(([k, t, s, ic, own]) => `<button class="folder" data-act="${own ? 'own' : 'unav'}" data-v="${k}">${ic}<b>${t}</b><span>${s}</span></button>`).join('')}</div>`;
 }
@@ -2590,7 +2590,7 @@ function nItems() {
   if (u.role === 'admin_ti') S.ti.filter(r => r.state === 'pendiente').forEach(r => o.push(['ti|' + r.id, 'Nueva solicitud TI de ' + r.uname, tiR(r) + (r.dept ? ' · ' + r.dept : '')]));
   if (SUP[u.role] && supAreas(u).includes('infra')) S.mant.filter(r => r.state === 'enviada' && !r.rrole && (r.area || 'infra') === 'infra').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
   if (u.role === 'admin_mant') S.mant.filter(r => r.state === 'enviada').forEach(r => o.push(['mt|' + r.id, 'Nueva solicitud de mantenimiento de ' + r.uname, r.place + (r.dept ? ' · ' + r.dept : '')]));
-  if (u.role === 'admin') S.sdoc.filter(r => r.state === 'pendiente').forEach(r => o.push(['sd|' + r.id, 'Nueva solicitud de documento de ' + unm(r), SDT[r.tipo] + ' · ' + ((r.doc || {}).nombre || '')]));
+  if (u.role === 'admin_sdoc') S.sdoc.filter(r => r.state === 'pendiente').forEach(r => o.push(['sd|' + r.id, 'Nueva solicitud de documento de ' + unm(r), SDT[r.tipo] + ' · ' + ((r.doc || {}).nombre || '')]));
   S.sdoc.filter(r => r.uid === u.id && r.rec).forEach(r => o.push(['sr|' + r.id + '|' + r.rec.ts, 'Tu solicitud de documento fue ' + (r.state === 'aprobada' ? 'aprobada' : 'rechazada'), ((r.doc || {}).nombre || '') + (r.rec.concl ? ' · ' + r.rec.concl : '')]));
   if (['sup_auto', 'sup_infra', 'gerente_mant'].includes(u.role)) S.mant.filter(r => r.pedido && r.cobDec && COBD[r.cobDec.k]).forEach(r => o.push(['cd|' + r.id + '|' + r.cobDec.ts, 'Facturación: ' + COBD[r.cobDec.k][0], r.place + (r.cobDec.nota ? ' · ' + r.cobDec.nota : '')]));
   if (u.role === 'rrhh') S.asisrh.forEach(r => o.push(['as|' + r.id + '|' + r.upd, 'Asistencia del fin de semana recibida', r.dept + ' · ' + wLabel(r.w)]));
@@ -2817,6 +2817,10 @@ function vRAsis() {
   ${hist.length ? `<h3 style="margin:20px 0 8px">Historial de reportes · ${esc(dsel)}</h3><div class="tw"><table><thead><tr><th>Fin de semana</th><th>Asistencia</th><th>Enviado</th></tr></thead><tbody>${hist.map(h => `<tr><td><b>${wLabel(h.w)}</b></td><td>${h.rows.map(x => `<div>${esc(x.name)}: Sáb ${mk1(x.s)} · Dom ${mk1(x.d)}</div>`).join('')}</td><td class="muted">${esc(h.by)}<div class="small">${fmt(h.upd)}</div></td></tr>`).join('')}</tbody></table></div>` : ''}`;
 }
 const fdate2 = s => { const d = fromISO(s); return d.getDate() + ' ' + MES[d.getMonth()].slice(0, 3); };
+function viewSdoc() {
+  const u = cur(), v = (['sdoc', 'cuenta'].includes(ui.view) || isU(ui.view)) ? ui.view : 'sdoc';
+  return mShell('Solicitudes de documentos', [['sdoc', 'Solicitudes de documentos', sdPend()], ['cuenta', 'Mi cuenta', 0]], v, isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : vASdoc(), u);
+}
 function viewRH() {
   const u = cur(), v = ui.view;
   return mShell('Talento Humano', [['rasis', 'Asistencia', 0], ['cuenta', 'Mi cuenta', 0]], v, isU(v) ? uBody() : v === 'cuenta' ? vCuenta() : vRAsis(), u);
@@ -2916,10 +2920,10 @@ Object.assign(ACT, {
     const r = S.sdoc.find(x => x.id === t.dataset.id), u = cur(); if (!r) return;
     if (r.state !== 'pendiente') return ACT.sdview(t);
     const [n0, a0] = splitName(u);
-    openModal(`<div class="modal" style="max-width:780px"><form data-form="sdnone"><div class="modal-h"><h2 style="margin:0">Revisar solicitud ${r.no}</h2><div class="small">De ${esc(unm(r))}${r.dept ? ' · ' + esc(r.dept) : ''}</div></div><div class="modal-b stack">${sdSheet(r)}<h3 style="margin:8px 0 0">Recepción · Organización y Procesos</h3><label>Evaluación (sobre la solicitud)<textarea name="evalu" rows="3"></textarea></label><label>Conclusión<textarea name="concl" rows="3" required></textarea></label><div class="sd-form"><label>Nombre<input name="nombre" value="${esc(n0)}" required></label><label>Apellido<input name="apellido" value="${esc(a0)}" required></label><label>Cargo<input name="cargo" value="${esc(u.cargo || 'Administrador de Biblioteca')}"></label><label>Fecha<input name="fecha" type="date" value="${todayISO()}"></label></div></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button type="button" class="btn danger" data-act="sdres" data-k="rechazada" data-id="${r.id}">Rechazar</button><button type="button" class="btn primary" data-act="sdres" data-k="aprobada" data-id="${r.id}">Aprobar</button></div></form></div>`);
+    openModal(`<div class="modal" style="max-width:780px"><form data-form="sdnone"><div class="modal-h"><h2 style="margin:0">Revisar solicitud ${r.no}</h2><div class="small">De ${esc(unm(r))}${r.dept ? ' · ' + esc(r.dept) : ''}</div></div><div class="modal-b stack">${sdSheet(r)}<h3 style="margin:8px 0 0">Recepción · Organización y Procesos</h3><label>Evaluación (sobre la solicitud)<textarea name="evalu" rows="3"></textarea></label><label>Conclusión<textarea name="concl" rows="3" required></textarea></label><div class="sd-form"><label>Nombre<input name="nombre" value="${esc(n0)}" required></label><label>Apellido<input name="apellido" value="${esc(a0)}" required></label><label>Cargo<input name="cargo" value="${esc(u.cargo || 'Administrador de documentos')}"></label><label>Fecha<input name="fecha" type="date" value="${todayISO()}"></label></div></div><div class="modal-f"><button type="button" class="btn" data-act="close">Cancelar</button><button type="button" class="btn danger" data-act="sdres" data-k="rechazada" data-id="${r.id}">Rechazar</button><button type="button" class="btn primary" data-act="sdres" data-k="aprobada" data-id="${r.id}">Aprobar</button></div></form></div>`);
   },
   sdres: t => {
-    const u = cur(), r = S.sdoc.find(x => x.id === t.dataset.id), f = t.closest('form'), k = t.dataset.k; if (!r || u.role !== 'admin' || r.state !== 'pendiente' || !SDS[k] || !f) return;
+    const u = cur(), r = S.sdoc.find(x => x.id === t.dataset.id), f = t.closest('form'), k = t.dataset.k; if (!r || u.role !== 'admin_sdoc' || r.state !== 'pendiente' || !SDS[k] || !f) return;
     const g = n => f[n].value.trim(); if (!g('concl')) return toast('Escribe la conclusión'); if (!g('nombre') || !g('apellido')) return toast('Completa tu nombre y apellido');
     const now = Date.now(); r.rec = { res: k, evalu: g('evalu'), concl: g('concl'), nombre: g('nombre'), apellido: g('apellido'), cargo: g('cargo'), fecha: g('fecha'), ts: now, by: u.id }; r.state = k; r.upd = now;
     save(); closeModal(); toast(k === 'aprobada' ? 'Solicitud aprobada. Se le avisó al solicitante' : 'Solicitud rechazada. Se le avisó al solicitante'); render();
