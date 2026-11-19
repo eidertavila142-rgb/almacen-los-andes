@@ -260,6 +260,38 @@ th{border-bottom:2px solid var(--brand-red)}
 .gw .btn.primary{background:linear-gradient(#d3180f,#b3120b);border-color:transparent;color:#fff;box-shadow:0 6px 14px rgba(190,20,12,.30)}
 .gw .link{color:#ff8a80}
 
+/* ===== Modo oscuro / Modo claro (todos los roles menos Admin Biblioteca) ===== */
+.tm{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:61;display:flex;align-items:center;gap:9px;padding:5px 7px 5px 13px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.tm .tmsw{position:relative;width:38px;height:22px;border-radius:999px;background:var(--line);transition:.15s;flex:none}
+.tm .tmsw::before{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.tm[aria-checked=true] .tmsw{background:var(--accent)}
+.tm[aria-checked=true] .tmsw::before{transform:translateX(16px)}
+html:has(#app.gw.light),body:has(#app.gw.light){background:#f6f7f9}
+#app.gw.light,#app.gw.light input,#app.gw.light select,#app.gw.light textarea{color-scheme:light}
+#app.gw.light{--bg:#eceef2;--surface:#e8eaee;--text:#1b1f27;--muted:#5a6270;--line:#d2d6dd;--accent:#7a1313;--accent-weak:#f1d9d8;--accent-text:#fff;--danger:#b42318;--danger-weak:#fdecea;--ok:#067647;--ok-weak:#e1f3e8;--warn:#8a5a00;--warn-weak:#fff1cc;--shadow:0 2px 8px rgba(16,24,40,.10);background:#f6f7f9}
+#app.gw.light aside,#app.gw.light .top,#app.gw.light .panel,#app.gw.light .stat,#app.gw.light .tw,#app.gw.light .folder{background:var(--surface);border:1px solid var(--line);box-shadow:0 2px 8px rgba(16,24,40,.10),inset 0 1px 0 #fff;-webkit-backdrop-filter:none;backdrop-filter:none}
+#app.gw.light aside,#app.gw.light .top{color:var(--text)}
+#app.gw.light aside::before,#app.gw.light .top::before,#app.gw.light .folder::before{content:none}
+#app.gw.light .logo{filter:brightness(.62) saturate(1.1)}
+#app.gw.light aside .brand,#app.gw.light .top .brand{color:var(--text)}
+#app.gw.light aside nav button,#app.gw.light .top nav button{color:var(--text)}
+#app.gw.light aside nav button:hover,#app.gw.light .top nav button:hover{background:rgba(0,0,0,.06);color:#000}
+#app.gw.light aside nav button.on,#app.gw.light .top nav button.on{background:#f6f7f9;color:#111;box-shadow:inset 0 0 0 2px #1b1f27}
+#app.gw.light aside .badge{background:#5a6270;color:#fff}
+#app.gw.light .aside-foot{border-top-color:var(--line)}
+#app.gw.light .aside-foot .muted,#app.gw.light .top .muted{color:var(--muted)}
+#app.gw.light .link,#app.gw.light .aside-foot .link{color:#7a1313}
+#app.gw.light .company{color:#3a414d}
+#app.gw.light .top .btn{background:var(--surface);border-color:var(--line);color:var(--text)}
+#app.gw.light .btn:hover,#app.gw.light .top .btn:hover{background:rgba(0,0,0,.07)}
+#app.gw.light .btn.primary{background:#6e1212;border-color:transparent;color:#fff;box-shadow:0 2px 6px rgba(110,18,18,.25)}
+#app.gw.light h1,#app.gw.light .folder b{color:#5e0f0f}
+#app.gw.light h1{border-left-color:#7a1313}
+#app.gw.light th{border-bottom-color:#7a1313;background:var(--bg)}
+#app.gw.light input:not([type=checkbox]):not([type=radio]),#app.gw.light select,#app.gw.light textarea{background:#f7f8fa}
+#app.gw.light option,#app.gw.light optgroup{background:#fff;color:#1b1f27}
+#app.gw.light input::selection,#app.gw.light textarea::selection{background:#7a1313;color:#fff}
+
 .pl{border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:10px;background:var(--bg)}
 .pl-h{display:flex;align-items:center;gap:12px;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:8px}.pl-h b{font-size:17px;letter-spacing:.06em}.pl-h span{font-size:11px;color:var(--muted)}
 .pl label{font-size:12px;display:grid;gap:3px}.pl .r2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}.pl .chk{display:flex;gap:14px;align-items:center;font-size:13px}.pl .chk label{display:flex;gap:5px;align-items:center}.pl .chk input{width:auto}
@@ -349,6 +381,7 @@ const idleReset = () => { clearTimeout(idleT); idleT = setTimeout(() => { if (ui
 const EMAIL = n => 'almacen.' + String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') + '@gmail.com';
 let S = { users: [], choferes: [], clientes: [], depts: [], cargos: [], ticat: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], viajes: [], stock: [], mstock: [], tstock: [], sdoc: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
 let SNAP = {};
+let TEMA = {}, TEMA_L = {};
 const COLL = { choferes: () => S.choferes, clientes: () => S.clientes, docs: () => S.docs, fixed: () => S.fixed, logs: () => S.logs, msgs: () => S.msgs, mails: () => S.mails, docinfo: () => S.docinfo, ti: () => S.ti, mant: () => S.mant, depts: () => S.depts.map(n => ({ id: n, n })), cargos: () => S.cargos.map(n => ({ id: n, n })), ticat: () => S.ticat, tk: () => S.tk, viajes: () => S.viajes, stock: () => S.stock, mstock: () => S.mstock, tstock: () => S.tstock, sdoc: () => S.sdoc, asis: () => S.asis, asisrh: () => S.asisrh, fin: () => S.fin, firmas: () => S.firmas, sdeleg: () => S.sdeleg, ucargo: () => S.users.filter(u => u.cargo).map(u => ({ id: u.id, cargo: u.cargo })) };
 function snapNow() {
   const m = {};
@@ -385,7 +418,7 @@ async function loadAll() {
   const [p, it] = await Promise.all([SB.from('profiles').select('*'), SB.from('items').select('coll,id,data').limit(5000)]);
   if (p.error || it.error) throw (p.error || it.error);
   S = { users: p.data.map(r => ({ id: r.id, name: r.name, dept: r.dept, role: r.role, download: r.download, full: r.full_name || '', cargo: '' })), choferes: [], clientes: [], depts: [], cargos: [], ticat: [], docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], viajes: [], stock: [], mstock: [], tstock: [], sdoc: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
-  const UC = {}; for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'cargos') S.cargos.push(r.data.n); else if (r.coll === 'ucargo') UC[r.id] = r.data.cargo; else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (S[r.coll]) S[r.coll].push(r.data); }
+  const UC = {}; for (const r of it.data) { if (r.coll === 'depts') S.depts.push(r.data.n); else if (r.coll === 'cargos') S.cargos.push(r.data.n); else if (r.coll === 'ucargo') UC[r.id] = r.data.cargo; else if (r.coll === 'settings') S.lockdown = !!r.data.v; else if (r.coll === 'tema') { if (!TEMA_L[r.id]) TEMA[r.id] = r.data && r.data.m === 'light' ? 'light' : 'dark'; } else if (S[r.coll]) S[r.coll].push(r.data); }
   S.users.forEach(u => { u.cargo = UC[u.id] || ''; });
   SNAP = snapNow();
 }
@@ -509,14 +542,27 @@ function askConfirm(text, cb, label = 'Confirmar') {
   openModal(`<div class="modal" style="max-width:420px"><div class="modal-b"><h2>${esc(text)}</h2></div><div class="modal-f"><button class="btn" data-act="close">Cancelar</button><button class="btn danger" data-act="doconfirm">${esc(label)}</button></div></div>`);
 }
 
+/* ============ Modo oscuro / Modo claro ============ */
+const temaOk = u => !!u && u.role !== 'admin';
+const temaGet = u => { if (!temaOk(u)) return 'dark'; if (TEMA[u.id]) return TEMA[u.id]; try { const v = localStorage.getItem('gilapp_tema_' + u.id); if (v === 'light' || v === 'dark') return v; } catch (e) { } return 'dark'; };
+const temaApply = u => { const r = document.documentElement; if (temaOk(u)) r.setAttribute('data-theme', temaGet(u)); else r.removeAttribute('data-theme'); };
+const temaBtn = u => { if (!temaOk(u)) return ''; const d = temaGet(u) === 'dark'; return `<button class="tm" data-act="tema" role="switch" aria-checked="${d}" title="Cambiar entre modo oscuro y modo claro"><span class="tmt">${d ? '☾ Modo oscuro' : '☀ Modo claro'}</span><span class="tmsw"></span></button>`; };
+async function temaSave(id, m) {
+  try {
+    const r = await SB.from('items').update({ data: { m } }).eq('coll', 'tema').eq('id', id).select('id'); if (r.error) throw r.error;
+    if (!r.data || !r.data.length) { const i = await SB.from('items').insert({ coll: 'tema', id, data: { m } }); if (i.error) throw i.error; }
+  } catch (e) { /* sin nube: queda guardado en este equipo */ }
+}
+
 /* ============ Render principal ============ */
 function render() {
   const app = $('#app');
-  if (!ui.user) { app.className = ''; app.innerHTML = viewAuth(); return; }
+  if (!ui.user) { document.documentElement.removeAttribute('data-theme'); app.className = ''; app.innerHTML = viewAuth(); return; }
   const u = cur(); if (!u) { ui.user = null; return render(); }
   const own = u.role !== 'user' && ui.mode === 'own';
-  app.className = own && u.role === 'admin' ? '' : 'gw';
-  app.innerHTML = !own ? viewUser() : '<button class="btn sm" data-act="home" style="position:fixed;right:16px;bottom:16px;z-index:60">⌂ Inicio</button>' + (u.role === 'admin' ? viewAdmin() : u.role === 'admin_users' ? viewUAdm() : u.role === 'admin_sdoc' ? viewSdoc() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : u.role === 'rrhh' ? viewRH() : TKR[u.role] ? viewTK() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser());
+  app.className = own && u.role === 'admin' ? '' : 'gw' + (temaGet(u) === 'light' ? ' light' : '');
+  temaApply(u);
+  app.innerHTML = (!own ? viewUser() : '<button class="btn sm" data-act="home" style="position:fixed;right:16px;bottom:' + (temaOk(u) ? 62 : 16) + 'px;z-index:60">⌂ Inicio</button>' + (u.role === 'admin' ? viewAdmin() : u.role === 'admin_users' ? viewUAdm() : u.role === 'admin_sdoc' ? viewSdoc() : u.role === 'admin_ti' ? viewTI() : u.role === 'gerente_mant' ? viewGer() : u.role === 'rrhh' ? viewRH() : TKR[u.role] ? viewTK() : u.role === 'admin_mant' ? viewAdminMod('mant') : (u.role === 'sup_auto' || u.role === 'sup_infra') ? viewSup() : viewUser())) + temaBtn(u);
   if (own && u.role === 'admin' && ui.view === 'subir') initUpload();
   if (STROLES.includes(u.role) && ui.view === 'stats') tiStatsDraw();
 }
@@ -1010,6 +1056,15 @@ async function openDoc(id, asAdmin) {
 
 /* ============ Acciones ============ */
 const ACT = {
+  tema: () => {
+    const u = cur(); if (!temaOk(u)) return;
+    const n = temaGet(u) === 'dark' ? 'light' : 'dark';
+    TEMA[u.id] = n; TEMA_L[u.id] = 1; try { localStorage.setItem('gilapp_tema_' + u.id, n); } catch (e) { }
+    temaApply(u); const app = $('#app'); app.classList.toggle('light', n === 'light');
+    const b = $('.tm', app); if (b) { b.setAttribute('aria-checked', n === 'dark'); b.firstElementChild.textContent = n === 'dark' ? '☾ Modo oscuro' : '☀ Modo claro'; }
+    if (STROLES.includes(u.role) && ui.view === 'stats') tiStatsDraw();
+    temaSave(u.id, n);
+  },
   tab: t => { ui.tab = t.dataset.v; ui.err = ''; render(); },
   logout: () => { SB.auth.signOut(); ui.user = null; ui.tab = 'login'; ui.err = ''; closeModal(); render(); },
   nav: t => { ui.view = t.dataset.v; render(); window.scrollTo(0, 0); },
