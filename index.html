@@ -646,11 +646,13 @@ const docQ = d => esc(norm([d.title, d.fileName, visLabel(d), (d.depts || []).jo
 document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p' && document.body.classList.contains('noprint-doc')) { e.preventDefault(); toast('La impresión de este documento no está permitida'); } });
 document.addEventListener('change', e => {
   if (e.target.id === 'f_info') $('#infoBlock').hidden = !e.target.checked;
+  if (e.target.dataset && e.target.dataset.t === 'Modalidad') $('#physBlock').hidden = e.target.value !== 'En físico';
   if (e.target.id === 'm_all') $$('.m_to,.m_dep').forEach(c => c.checked = e.target.checked);
   if (e.target.classList.contains('m_dep')) $$('.m_to', e.target.closest('.m_grp')).forEach(c => c.checked = e.target.checked);
   if (e.target.closest('.m_grp') || e.target.id === 'm_all') { const n = $$('.m_to:checked').length, t = $('#m_count'); if (t) t.textContent = n + (n === 1 ? ' seleccionado' : ' seleccionados'); }
 });
 document.addEventListener('input', e => {
+  if (e.target.id === 'r_search') { const q = norm(e.target.value.trim()); $$('.r_row').forEach(r => r.hidden = !r.dataset.q.includes(q)); return; }
   if (e.target.id === 'm_search') { const q = norm(e.target.value.trim()); $$('.m_row').forEach(r => r.hidden = !r.dataset.q.includes(q)); $$('.m_grp').forEach(g => g.hidden = !$$('.m_row', g).some(r => !r.hidden)); return; }
   const t = e.target.closest('[data-search]'); if (!t) return;
   const tb = document.getElementById(t.dataset.search); if (!tb) return;
@@ -717,7 +719,7 @@ function viewAuth() {
 /* ============ Panel del administrador ============ */
 function viewAdmin() {
   const unread = S.msgs.filter(m => !m.read).length;
-  const nav = [['resumen','Resumen'],['docs','Documentos'],['subir','Subir documento'],['users','Usuarios'],['newu','Crear usuario'],['mail','Enviar correo'],['depts','Departamentos'],['cargos','Cargos'],['trash','Papelera'],['archive','Archivo'],['log','Historial'],['msgs','Mensajes'],['cuenta','Mi cuenta']];
+  const nav = [['resumen','Resumen'],['docs','Documentos'],['subir','Subir documento'],['users','Usuarios'],['newu','Crear usuario'],['mail','Enviar correo'],['depts','Departamentos'],['cargos','Cargos'],['trash','Papelera'],['archive','Obsoleto'],['log','Historial'],['msgs','Mensajes'],['cuenta','Mi cuenta']];
   const V = { resumen: vResumen, docs: vDocs, subir: vSubir, users: vUsers, newu: vNewU, mail: vMail, depts: vDepts, cargos: vCargos, trash: vTrash, archive: vArchive, log: vLog, msgs: vMsgs, cuenta: vCuenta };
   return `<div class="shell"><aside>
     <div class="brand">${I.logo} <span>GilApp</span></div>
@@ -757,13 +759,14 @@ function vDocs() {
   return `<div class="between"><div><h1>Documentos</h1><p class="sub">Gestiona permisos, descarga y eliminación.</p></div><button class="btn primary" data-act="nav" data-v="subir">Subir documento</button></div>
   ${docs.length ? searchBox('tb_docs', 'Buscar documentos subidos…', MASCOT.admin) : ''}<div class="tw">${docs.length ? `<table><thead><tr><th>Documento</th><th>Compartido con</th><th>Con acceso</th><th>Descargar</th><th></th></tr></thead><tbody id="tb_docs">
   ${docs.map(d => `<tr data-q="${docQ(d)}">
-    <td><b>${esc(d.title)}</b><div class="small">${esc(d.fileName)} · ${fmt(d.created)}</div></td>
+    <td><b>${esc(d.title)}</b><div class="small">${esc(d.fileName)} · ${fmt(d.created)}</div>${physTag(d)}</td>
     <td>${docVisCell(d)}</td>
     <td>${workers().filter(u => effective(d, u)).length} usuarios</td>
     <td><label class="sw"><input type="checkbox" data-chg="dl" data-id="${d.id}" ${canDl(d) ? 'checked' : ''}><span></span></label><div class="small" style="max-width:200px">${esc(dlScope(d))}</div></td>
     <td style="white-space:nowrap;text-align:right">
       <button class="btn sm" data-act="view" data-id="${d.id}">Ver</button>
       <button class="btn sm" data-act="docperm" data-id="${d.id}">Permisos</button>
+      <button class="btn sm" data-act="toobs" data-id="${d.id}">Obsoleto</button>
       <button class="btn sm danger" data-act="totrash" data-id="${d.id}">Eliminar</button>
     </td></tr>`).join('')}${NORES(5)}</tbody></table>` : `<div class="empty">No hay documentos activos.</div>`}</div>`;
 }
@@ -830,6 +833,10 @@ async function submitUpload() {
   const cards = $$('#cards .card-f').map(el => ({
     fid: el.dataset.fid, t: $('.cf-t', el).value.trim(), d: $('.cf-d', el).value.trim(), fix: $('.cf-fix', el).checked
   })).filter(c => c.t || c.d);
+  if ($('#f_info').checked && $('.i_f[data-t="Modalidad"]').value === 'En físico') {
+    if (!$$('.i_resp:checked').length) return toast('Selecciona al menos un responsable de la copia física');
+    if (!$('#i_lugar').value.trim()) return toast('Escribe el lugar donde está la copia física');
+  }
   const btn = $('#f_submit'); btn.disabled = true; btn.textContent = 'Subiendo…';
   const doc = { id: uid(), title, fileName: file.name, mime: file.type || 'application/octet-stream', size: file.size,
     vis, depts: vis === 'dept' ? depts : [], perms: vis === 'private' ? { [userId]: 'allow' } : {},
@@ -837,7 +844,7 @@ async function submitUpload() {
   try { await idbPut(doc.id, file); }
   catch (e) { btn.disabled = false; btn.textContent = 'Subir documento'; return toast('No se pudo subir el archivo: ' + ((e && e.message) || e)); }
   S.docs.push(doc);
-  if ($('#f_info').checked) { const o = { id: doc.id, dist: $$('.i_dist:checked').map(x => x.value) }; $$('.i_f').forEach(x => o[x.dataset.t] = x.value.trim()); S.docinfo.push(o); }
+  if ($('#f_info').checked) { const o = { id: doc.id, dist: $$('.i_dist:checked').map(x => x.value) }; $$('.i_f').forEach(x => o[x.dataset.t] = x.value.trim()); if (o.Modalidad === 'En físico') { o.resp = $$('.i_resp:checked').map(x => x.value); o.lugar = $('#i_lugar').value.trim(); } S.docinfo.push(o); }
   const prevFixed = S.fixed;
   S.fixed = cards.filter(c => c.fix).map(c => ({ id: c.fid || uid(), t: c.t, d: c.d }));
   if (save()) { toast('Documento subido'); ui.view = 'docs'; render(); }
@@ -916,9 +923,18 @@ function uMail() {
   return `<h1>Correos</h1><p class="sub">Mensajes privados que te envió el administrador.</p>` + (ms.length ? ms.map(m => `<div class="panel"><div class="between"><b>${esc(m.subject)}</b><span class="muted" style="font-size:12px">${fmt(m.ts)}</span></div><p style="margin:8px 0 0;white-space:pre-wrap">${esc(m.text)}</p></div>`).join('') : `<div class="tw"><div class="empty">No tienes correos.</div></div>`);
 }
 const openBtn = d => d.revision ? '<span class="muted">En revisión</span>' : `<button class="btn sm primary" data-act="open" data-id="${d.id}">Abrir</button>`;
+const modLabel = m => m === 'Online' ? 'En línea' : m === 'Presencial' ? 'En físico' : (m || '');
+const physTag = d => {
+  const i = S.docinfo.find(x => x.id === d.id); if (!i || modLabel(i.Modalidad) !== 'En físico') return '';
+  const rs = (i.resp || []).map(id => { const u = S.users.find(x => x.id === id); return u ? dn(u) : 'Usuario eliminado'; });
+  return `<div class="small" style="margin-top:4px"><span class="pill warn">En físico</span> ${rs.length ? 'Responsable' + (rs.length > 1 ? 's' : '') + ': <b>' + esc(rs.join(', ')) + '</b>' : '<b>Sin responsable asignado</b>'}${i.lugar ? ' · Lugar: <b>' + esc(i.lugar) + '</b>' : ''}</div>`;
+};
 const INFO = ['Código', 'Nombre', 'Edición', 'Revisión', 'Fecha de edición', 'Fecha de revisión'];
 const infoBlock = () => `<div id="infoBlock" class="stack" hidden><div class="grid2">${INFO.map((t, i) => `<label>${t}<input class="i_f" data-t="${t}" ${i > 3 ? 'type="date"' : ''}></label>`).join('')}
-  <label>Modalidad<select class="i_f" data-t="Modalidad"><option value="">—</option><option>Online</option><option>Presencial</option></select></label></div>
+  <label>Modalidad de distribución<select class="i_f" data-t="Modalidad"><option value="">—</option><option>En línea</option><option>En físico</option></select></label></div>
+  <div id="physBlock" class="stack" hidden><div><div class="between"><label>Responsables de la copia física (uno o más)</label><input type="search" id="r_search" placeholder="Buscar usuario…" style="width:220px" autocomplete="off"></div>
+    <div style="max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;margin-top:6px">${S.users.map(u => `<label class="r_row chk" data-q="${esc(norm(dn(u) + ' ' + u.name + ' ' + (u.dept || '')))}" style="display:flex;padding:7px 12px;border-bottom:1px solid var(--line)"><input type="checkbox" class="i_resp" value="${esc(u.id)}"> <span style="margin-left:8px">${esc(dn(u))}<span class="muted"> · ${esc(u.dept) || 'Sin departamento'}</span></span></label>`).join('')}</div></div>
+    <label>Lugar donde está la copia física<input id="i_lugar" maxlength="120" placeholder="Ej.: Oficina de Calidad, archivador 2"></label></div>
   <div><label>Distribución (jefes de usuarios)</label><div class="row" style="flex-wrap:wrap;gap:6px 18px;margin-top:6px">${S.users.map(u => `<label class="chk"><input type="checkbox" class="i_dist" value="${esc(u.name)}"> ${esc(dn(u))}</label>`).join('')}</div></div></div>`;
 
 /* ---- Departamentos ---- */
@@ -944,15 +960,15 @@ function vCargos() {
 /* ---- Papelera y archivo ---- */
 function vTrash() {
   const docs = S.docs.filter(d => d.status === 'trash');
-  return `<h1>Papelera</h1><p class="sub">Restaurar envía el documento al archivo; eliminar es definitivo.</p>
-  ${docs.length ? searchBox('tb_trash', 'Buscar en la papelera…') : ''}<div class="tw">${docs.length ? `<table><thead><tr><th>Documento</th><th>Eliminado</th><th></th></tr></thead><tbody id="tb_trash">${docs.map(d => `<tr data-q="${docQ(d)}"><td><b>${esc(d.title)}</b><div class="small">${esc(d.fileName)}</div></td><td class="muted">${fmt(d.deleted)}</td>
+  return `<h1>Papelera</h1><p class="sub">Restaurar envía el documento a Obsoleto; eliminar es definitivo.</p>
+  ${docs.length ? searchBox('tb_trash', 'Buscar en la papelera…') : ''}<div class="tw">${docs.length ? `<table><thead><tr><th>Documento</th><th>Eliminado</th><th></th></tr></thead><tbody id="tb_trash">${docs.map(d => `<tr data-q="${docQ(d)}"><td><b>${esc(d.title)}</b><div class="small">${esc(d.fileName)}</div>${physTag(d)}</td><td class="muted">${fmt(d.deleted)}</td>
     <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-act="restore" data-id="${d.id}">Restaurar</button> <button class="btn sm danger" data-act="purge" data-id="${d.id}">Eliminar definitivamente</button></td></tr>`).join('')}${NORES(3)}</tbody></table>` : `<div class="empty">La papelera está vacía.</div>`}</div>`;
 }
 function vArchive() {
   const docs = S.docs.filter(d => d.status === 'archive');
-  return `<h1>Archivo</h1><p class="sub">Documentos restaurados, sin acceso para nadie hasta que se vuelvan a compartir.</p>
-  ${docs.length ? searchBox('tb_arch', 'Buscar en el archivo…') : ''}<div class="tw">${docs.length ? `<table><thead><tr><th>Documento</th><th>Restaurado</th><th></th></tr></thead><tbody id="tb_arch">${docs.map(d => `<tr data-q="${docQ(d)}"><td><b>${esc(d.title)}</b><div class="small">${esc(d.fileName)}</div></td><td class="muted">${fmt(d.restored)}</td>
-    <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-act="view" data-id="${d.id}">Ver</button> <button class="btn sm primary" data-act="docperm" data-id="${d.id}" data-arch="1">Dar acceso</button> <button class="btn sm danger" data-act="totrash" data-id="${d.id}">Eliminar</button></td></tr>`).join('')}${NORES(3)}</tbody></table>` : `<div class="empty">El archivo está vacío.</div>`}</div>`;
+  return `<h1>Obsoleto</h1><p class="sub">Documentos que ya no están en uso pero que no se quieren borrar todavía. Nadie tiene acceso a ellos: desde aquí puedes darles acceso de nuevo o enviarlos a la papelera.</p>
+  ${docs.length ? searchBox('tb_arch', 'Buscar en obsoletos…') : ''}<div class="tw">${docs.length ? `<table><thead><tr><th>Documento</th><th>Enviado a Obsoleto</th><th></th></tr></thead><tbody id="tb_arch">${docs.map(d => `<tr data-q="${docQ(d)}"><td><b>${esc(d.title)}</b><div class="small">${esc(d.fileName)}</div>${physTag(d)}</td><td class="muted">${fmt(d.obsolete || d.restored)}</td>
+    <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-act="view" data-id="${d.id}">Ver</button> <button class="btn sm primary" data-act="docperm" data-id="${d.id}" data-arch="1">Dar acceso</button> <button class="btn sm danger" data-act="totrash" data-id="${d.id}">Eliminar</button></td></tr>`).join('')}${NORES(3)}</tbody></table>` : `<div class="empty">No hay documentos obsoletos.</div>`}</div>`;
 }
 
 /* ---- Historial ---- */
@@ -1173,7 +1189,7 @@ async function openDoc(id, asAdmin) {
   openModal(`<div class="modal wide" data-doc="${d.id}">
     <div class="modal-h"><div><h2 style="margin:0">${esc(d.title)}</h2><div class="muted" style="font-size:12px">${esc(d.fileName)}</div></div><button class="btn sm no-print" data-act="close">Cerrar</button></div>
     <div class="modal-b">
-      ${asAdmin && S.docinfo.find(x => x.id === d.id) ? (i => `<div class="card-f no-print" style="margin:0 0 14px"><b>Información del documento (solo administrador)</b><div class="muted" style="margin-top:6px;line-height:1.7">${[...INFO, 'Modalidad'].map(t => `${t}: <b>${esc(i[t]) || '—'}</b>`).join(' · ')}<br>Distribución: <b>${esc((i.dist || []).join(', ')) || '—'}</b></div></div>`)(S.docinfo.find(x => x.id === d.id)) : ''}
+      ${asAdmin && S.docinfo.find(x => x.id === d.id) ? (i => `<div class="card-f no-print" style="margin:0 0 14px"><b>Información del documento (solo administrador)</b><div class="muted" style="margin-top:6px;line-height:1.7">${INFO.map(t => `${t}: <b>${esc(i[t]) || '—'}</b>`).join(' · ')} · Modalidad de distribución: <b>${esc(modLabel(i.Modalidad)) || '—'}</b><br>Distribución: <b>${esc((i.dist || []).join(', ')) || '—'}</b>${physTag(d)}</div></div>`)(S.docinfo.find(x => x.id === d.id)) : ''}
       ${d.fields.length ? `<div class="no-print" style="display:grid;gap:8px;margin-bottom:14px">${d.fields.map(f => `<div class="card-f" style="margin:0">${f.t ? `<b>${esc(f.t)}</b>` : ''}${f.d ? `<div class="muted" style="white-space:pre-wrap">${esc(f.d)}</div>` : ''}</div>`).join('')}</div>` : ''}
       <div class="row no-print">${canDownload ? `<button class="btn" data-act="download" data-id="${d.id}" data-admin="${asAdmin ? 1 : ''}">Descargar</button>` : '<span class="muted" style="font-size:12px">La descarga no está habilitada para este documento.</span>'}</div>
       <div class="preview">${prev}</div>
@@ -1207,7 +1223,8 @@ const ACT = {
   docperm: t => docPermModal(t.dataset.id, !!t.dataset.arch),
   userperm: t => userPermModal(t.dataset.id),
   totrash: t => askConfirm('¿Enviar este documento a la papelera?', () => { const d = S.docs.find(x => x.id === t.dataset.id); d.status = 'trash'; d.deleted = Date.now(); save(); toast('Enviado a la papelera'); render(); }, 'Enviar a papelera'),
-  restore: t => { const d = S.docs.find(x => x.id === t.dataset.id); d.status = 'archive'; d.restored = Date.now(); save(); toast('Restaurado en el archivo'); render(); },
+  toobs: t => askConfirm('¿Enviar este documento a Obsoleto? Nadie podrá abrirlo hasta que le des acceso de nuevo o lo elimines.', () => { const d = S.docs.find(x => x.id === t.dataset.id); d.status = 'archive'; d.obsolete = Date.now(); save(); toast('Enviado a Obsoleto'); render(); }, 'Enviar a Obsoleto'),
+  restore: t => { const d = S.docs.find(x => x.id === t.dataset.id); d.status = 'archive'; d.obsolete = Date.now(); save(); toast('Restaurado en Obsoleto'); render(); },
   purge: t => askConfirm('¿Eliminar definitivamente? Esta acción no se puede deshacer.', () => { idbDel(t.dataset.id); S.docs = S.docs.filter(x => x.id !== t.dataset.id); save(); render(); }, 'Eliminar definitivamente'),
   newuser: () => { ui.view = 'newu'; render(); },
   edituser: t => userForm(S.users.find(x => x.id === t.dataset.id)),
