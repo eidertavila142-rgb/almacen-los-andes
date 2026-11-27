@@ -454,20 +454,35 @@ function seed() {
   };
 }
 const SB_URL = 'https://bgfsnwnhxhlcigcktwli.supabase.co', SB_KEY = 'sb_publishable_icLlK0g5LWJrU07LjKhopg_-aV2dani';
-/* Sesión solo en esta pestaña: se cierra al cerrar la pestaña o el navegador, y no se comparte entre pestañas ni equipos */
+/* Sesión solo en esta pestaña: se cierra al cerrar la pestaña o el navegador, y no se comparte entre pestañas ni equipos.
+   Excepción: los usuarios de Gerencia de Planta conservan su sesión (también al cerrar la pestaña) hasta que pulsen «Cerrar sesión». */
 Object.keys(localStorage).filter(k => k.startsWith('sb-')).forEach(k => localStorage.removeItem(k));
-const SB = supabase.createClient(SB_URL, SB_KEY, { auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true } });
-/* Cierre automático por inactividad (15 min) */
+const KEEP_K = 'gilapp-keep';
+const authStore = {
+  getItem: k => window.sessionStorage.getItem(k),
+  setItem: (k, v) => { window.sessionStorage.setItem(k, v); try { if (localStorage.getItem(KEEP_K)) localStorage.setItem(KEEP_K, JSON.stringify({ k, v })); } catch (e) { } },
+  removeItem: k => { window.sessionStorage.removeItem(k); try { localStorage.removeItem(KEEP_K); } catch (e) { } }
+};
+try { const kp = JSON.parse(localStorage.getItem(KEEP_K) || 'null'); if (kp && kp.k && kp.v && !window.sessionStorage.getItem(kp.k)) window.sessionStorage.setItem(kp.k, kp.v); } catch (e) { }
+const SB = supabase.createClient(SB_URL, SB_KEY, { auth: { storage: authStore, persistSession: true, autoRefreshToken: true } });
+const esPlanta = u => !!u && /gerencia.*planta/i.test(u.dept || '');
+/* Cierre automático por inactividad (15 min), salvo Gerencia de Planta y mientras haya algo sin guardar */
 let idleT; const IDLE_MS = 15 * 60 * 1000;
-const idleReset = () => { clearTimeout(idleT); idleT = setTimeout(() => { if (ui.user) { ACT.logout(); toast('Sesión cerrada por inactividad'); } }, IDLE_MS); };
+const idleReset = () => { clearTimeout(idleT); idleT = setTimeout(() => { if (!ui.user) return; if (esPlanta(cur()) || FAILED.size) { if (FAILED.size) save(); return idleReset(); } ACT.logout(); toast('Sesión cerrada por inactividad'); }, IDLE_MS); };
 ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev => document.addEventListener(ev, idleReset, { passive: true })); idleReset();
+window.addEventListener('beforeunload', e => { if (FAILED.size) { e.preventDefault(); e.returnValue = ''; } });
 const EMAIL = n => 'almacen.' + String(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') + '@gmail.com';
 const TICAT_FIX = ['Soporte técnico', 'Falla de equipo', 'Sistema', 'Conexiones', 'Implementos'].map(n => ({ id: 'cat-' + n, n, reg: n }));
 let S = { users: [], choferes: [], dirs: [], clientes: [], depts: [], cargos: [], ticat: TICAT_FIX.slice(), docs: [], fixed: [], logs: [], msgs: [], mails: [], docinfo: [], ti: [], mant: [], tk: [], viajes: [], stock: [], mstock: [], tstock: [], sdoc: [], proj: [], ptask: [], tkdir: [], tkpay: [], asis: [], asisrh: [], fin: [], firmas: [], sdeleg: [], lockdown: false };
 let SNAP = {};
 let TEMA = {}, TEMA_L = {}, SND = {}, SND_L = {};
 let FAILED = new Map(), FAILMSG = '';
+function persistFailed() { try { const u = ui.user; if (!u) return; if (FAILED.size) localStorage.setItem('gilapp-pend-' + u, JSON.stringify([...FAILED])); else localStorage.removeItem('gilapp-pend-' + u); } catch (e) { } }
+function restorePend(uid) {
+  try { const a = JSON.parse(localStorage.getItem('gilapp-pend-' + uid) || '[]'); let n = 0; a.forEach(([k, v]) => { const i = k.indexOf('|'), c = k.slice(0, i), id = k.slice(i + 1); if (!Array.isArray(S[c]) || S[c].some(x => x.id === id)) return; S[c].push(v); FAILED.set(k, v); n++; }); localStorage.removeItem('gilapp-pend-' + uid); if (n) { save(); toast('Se recuperaron ' + n + ' registro(s) que no se habían guardado y se están enviando a la nube'); } } catch (e) { }
+}
 function warnUpdate() {
+  persistFailed();
   let b = document.getElementById('savewarn');
   if (!FAILED.size) { if (b) b.remove(); return; }
   if (!b) { b = document.createElement('div'); b.id = 'savewarn'; b.setAttribute('role', 'alert'); b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:10px;z-index:90;max-width:92vw;background:#b42318;color:#fff;padding:8px 16px;border-radius:999px;font:600 13px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.35)'; document.body.appendChild(b); }
@@ -558,7 +573,8 @@ async function enter() {
   try { await loadAll(); } catch (e) { toast('Error al cargar: ' + (e.message || e)); return; }
   const u = S.users.find(x => x.id === session.user.id);
   if (!u) { await SB.auth.signOut(); ui.user = null; ui.err = 'Tu cuenta fue eliminada'; return render(); }
-  ui.user = u.id; ui.err = ''; ui.view = u.role === 'admin' ? 'resumen' : u.role === 'admin_users' ? 'gestion' : u.role === 'admin_sdoc' ? 'estado' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'bandeja' : u.role === 'admin_ti' ? 'estado' : u.role === 'admin_mant' ? 'estado' : u.role === 'gerente_mant' ? 'bandeja' : u.role === 'rrhh' ? 'rasis' : TKN[u.role] ? TKN[u.role][0][0] : 'all'; ui.st = null; ui.uview = 'desk'; ui.mode = 'user'; ui.rs = ui.rcat = ui.rdep = ''; ui.h = {}; NSEEN = null; notifyScan(); render(); rtStart();
+  try { if (esPlanta(u)) { const sk = Object.keys(sessionStorage).find(k => /^sb-.*-auth-token$/.test(k)); if (sk) localStorage.setItem(KEEP_K, JSON.stringify({ k: sk, v: sessionStorage.getItem(sk) })); } else localStorage.removeItem(KEEP_K); } catch (e) { }
+  ui.user = u.id; ui.err = ''; restorePend(u.id); ui.view = u.role === 'admin' ? 'resumen' : u.role === 'admin_users' ? 'gestion' : u.role === 'admin_sdoc' ? 'estado' : (u.role === 'sup_auto' || u.role === 'sup_infra') ? 'bandeja' : u.role === 'admin_ti' ? 'estado' : u.role === 'admin_mant' ? 'estado' : u.role === 'gerente_mant' ? 'bandeja' : u.role === 'rrhh' ? 'rasis' : TKN[u.role] ? TKN[u.role][0][0] : 'all'; ui.st = null; ui.uview = 'desk'; ui.mode = 'user'; ui.rs = ui.rcat = ui.rdep = ''; ui.h = {}; NSEEN = null; notifyScan(); render(); rtStart();
 }
 /* Archivos: Supabase Storage (bucket privado "documentos") */
 const MAX_BYTES = 10 * 1024 * 1024 * 1024;
@@ -1210,7 +1226,7 @@ const ACT = {
     temaSave(u.id, n);
   },
   tab: t => { ui.tab = t.dataset.v; ui.err = ''; render(); },
-  logout: () => { SB.auth.signOut(); ui.user = null; ui.tab = 'login'; ui.err = ''; closeModal(); render(); },
+  logout: () => { try { localStorage.removeItem(KEEP_K); } catch (e) { } persistFailed(); SB.auth.signOut(); ui.user = null; FAILED.clear(); warnUpdate(); ui.tab = 'login'; ui.err = ''; closeModal(); render(); },
   nav: t => { ui.view = t.dataset.v; render(); window.scrollTo(0, 0); },
   unav: t => { ui.uview = t.dataset.v; render(); },
   home: () => { ui.panel = ''; ui.mode = 'user'; ui.uview = 'desk'; ui.view = ownView(cur()); render(); },
@@ -2753,7 +2769,7 @@ const evaSelBar = () => { const n = evaSel().length; return `<div class="panel r
 const salRenum = () => $$('.srow .sn').forEach((e, i) => { e.textContent = i + 1; });
 const salRowHtml = (r, i, pa) => {
   const cli = S.clientes.find(c => c.id === r.clienteId) || {};
-  const dsel = pa && pa.dirId ? pa.dirId : pa && pa.lugar ? ((S.dirs.find(d => d.nombre.toLowerCase() === pa.lugar.toLowerCase()) || {}).id || '__keep') : (cli.dirId || '');
+  const dsel = pa && pa.dirId ? pa.dirId : pa && pa.lugar ? ((S.dirs.find(d => d.nombre.toLowerCase() === pa.lugar.toLowerCase()) || {}).id || '__keep') : (r.dirId || cli.dirId || '');
   const keep = pa && pa.lugar && dsel === '__keep' ? pa.lugar : '';
   const outs = (r.items || []).filter(x => (+x.out || 0) > 0);
   return `<div class="panel stack srow" data-tk="${esc(r.id)}" data-keep="${esc(keep)}" style="padding:10px"><div class="between"><div><b class="sn">${i + 1}</b>. <b>${esc(r.cliente)}</b> <span class="small">${esc(cod(r))} · ${esc(TKENT[r.ent] || '')}</span></div><div class="row"><button type="button" class="btn sm" data-act="salup" title="Subir">↑</button><button type="button" class="btn sm" data-act="saldn" title="Bajar">↓</button></div></div>
@@ -3779,10 +3795,10 @@ const NMOD = { mail: 'mail', doc: 'lib', msg: 'lib', sd: 'sdoc', sr: 'sdoc', pi:
 const MODN = { lib: 'Biblioteca', ti: 'Soporte técnico (TI)', mant: 'Mantenimiento', sdoc: 'Proyectos y documentos', own: 'Tu panel de trabajo', mail: 'Correos' };
 const NCOD = { mt: 'mant', mg: 'mant', mc: 'mant', mq: 'mant', ma: 'mant', cd: 'mant', ti: 'ti', tp: 'ti', tt: 'ti', sd: 'sdoc', sr: 'sdoc', td: 'tk', tdv: 'tk', tn: 'tk', tf: 'tk', tc: 'tk', ta: 'tk', sa: 'tk' };
 const nCode = k => { const p = k.split('|')[0], c = p === 'tv' ? (cur().role === 'tk_ver' ? 'tk' : 'ti') : NCOD[p]; if (!c || !Array.isArray(S[c])) return ''; const rest = k.slice(p.length + 1), r = S[c].find(x => x.id && rest.indexOf(x.id) === 0); const x = r ? cod(r) : ''; return x === '…' ? '' : x; };
-const WORK = { admin_ti: ['ti', 'tl'], admin_mant: ['mt'], sup_auto: ['mt', 'mc'], sup_infra: ['mt', 'mc'], gerente_mant: ['mg'], admin_sdoc: ['sd'], admin: ['sd', 'msg'], tk_desp: ['td', 'tdv', 'sl'], tk_ver: ['tv'], tk_alm: ['ta'], tk_anal: ['tn', 'tf'], cobranza: ['tc', 'mq'], rrhh: ['as'] };
+const WORK = { admin_ti: ['ti', 'tl'], admin_mant: ['mt'], sup_auto: ['mt', 'mc'], sup_infra: ['mt', 'mc'], gerente_mant: ['mg'], admin_sdoc: ['sd'], admin: ['sd', 'msg'], tk_desp: ['td', 'tdv', 'sl'], tk_ver: ['tv'], tk_alm: ['ta'], tk_anal: ['tn', 'tf'], tk_crea: ['sa'], cobranza: ['tc', 'mq'], rrhh: ['as'] };
 function nTodoBar() {
   document.querySelectorAll('.ntodo').forEach(e => e.remove());
-  const u = cur(), w = u && WORK[u.role], v = ui.view || '';
+  const u = cur(), w = u && (WORK[u.role] || []), v = ui.view || '';
   if (!w || ui.mode !== 'own' || v === 'cuenta' || v.indexOf('u:') === 0) return;
   const m = document.querySelector('#app main'); if (!m) return;
   const t = nItems().filter(i => w.includes(i[0].split('|')[0])), n = t.length;
